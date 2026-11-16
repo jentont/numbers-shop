@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Solutions Numbers</title>
+<link rel="preload" href="static/fonts/Manrope.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="static/fonts/Unbounded-Black.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="static/styles.css?v=5">
+<script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+</head>
+<body>
+
+<div class="boot" id="boot">
+  <div class="boot-mark"><b>S</b></div>
+  <div class="boot-bar"><i></i></div>
+</div>
+
+<!-- Обучение: язык + 4 шага -->
+<div class="tour" id="tour" hidden>
+  <div class="tour-top">
+    <button class="tour-lang" id="tour-lang" type="button"></button>
+    <button class="tour-skip" id="tour-skip" type="button" data-t="skip"></button>
+  </div>
+  <div class="tour-stage" id="tour-stage"></div>
+  <div class="tour-card">
+    <div class="tour-step" id="tour-step"></div>
+    <h2 id="tour-title"></h2>
+    <p id="tour-text"></p>
+    <div class="tour-foot">
+      <div class="dots" id="tour-dots"></div>
+      <button class="btn btn-ink" id="tour-next" type="button"></button>
+    </div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="logo"><span class="logo-s">S</span><span class="logo-t"><b>NUMBERS</b><i>by Solutions</i></span></div>
+    <div class="top-r">
+      <button class="cart-btn" id="cart-btn" type="button" data-i="cart"><i class="cart-n" id="cart-n" hidden></i></button>
+      <button class="bal" id="bal" type="button"><span id="bal-val">0 ₽</span><span class="bal-plus" data-i="plus"></span></button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Маркет -->
+    <section class="screen is-on" data-screen="market">
+      <div class="demo" id="demo" hidden data-t="demo"></div>
+      <label class="search"><span data-i="search"></span><input id="q" type="search" autocomplete="off" data-tp="search"></label>
+      <div class="chips" id="cats"></div>
+      <div id="hero"></div>
+      <div id="arrivals"></div>
+      <div class="sec" id="sec-fresh" hidden>
+        <div class="sec-h"><h3><span data-i="flame"></span><span data-t="fresh"></span></h3>
+          <div class="arrows"><button type="button" data-scroll="fresh:-1" data-i="back"></button><button type="button" data-scroll="fresh:1" data-i="chevron"></button></div></div>
+        <div class="hscroll" id="fresh"></div>
+      </div>
+      <div class="sec" id="sec-promo" hidden>
+        <div class="sec-h"><h3><span data-i="percent"></span><span data-t="promos"></span></h3></div>
+        <div class="hscroll" id="promos"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-h"><h3><span data-i="globe"></span><span data-t="countries"></span></h3><small id="ccount"></small></div>
+        <div class="chips chips-tight" id="regions"></div>
+        <div class="chips chips-tight" id="csort"></div>
+        <div class="grid-c" id="countries"></div>
+        <div class="pager" id="c-pager"></div>
+      </div>
+    </section>
+
+    <!-- Страна -->
+    <section class="screen" data-screen="country">
+      <div class="c-head" id="c-head"></div>
+      <div class="toolbar">
+        <div class="chips" id="sorts"></div>
+        <button class="icon-btn" id="filter-btn" type="button" data-i="filter"><i class="dot" id="filter-dot" hidden></i></button>
+      </div>
+      <div id="c-instant"></div>
+      <div class="list" id="lots"></div>
+      <div class="pager" id="l-pager"></div>
+    </section>
+
+    <!-- Покупки -->
+    <section class="screen" data-screen="orders">
+      <h1 class="h1" data-t="my_orders"></h1>
+      <div class="list" id="orders"></div>
+      <div class="pager" id="o-pager"></div>
+    </section>
+
+    <!-- Конкурс -->
+    <section class="screen" data-screen="gw">
+      <h1 class="h1" data-t="gw_title"></h1>
+      <div id="gw"></div>
+    </section>
+
+    <!-- Кошелёк -->
+    <section class="screen" data-screen="wallet">
+      <h1 class="h1" data-t="wallet"></h1>
+      <div class="wcard">
+        <div class="wcard-top"><small data-t="balance"></small><span class="wcard-s">S</span></div>
+        <b id="w-bal">0 ₽</b>
+        <span class="wcard-id" id="w-id"></span>
+        <div class="wcard-acts">
+          <button type="button" id="act-topup"><span data-i="plus"></span><b data-t="topup"></b></button>
+          <button type="button" id="act-send"><span data-i="send"></span><b data-t="send"></b></button>
+          <button type="button" id="act-promo"><span data-i="ticket"></span><b data-t="promo"></b></button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="list">
+          <button class="row" id="open-history" type="button"><span class="row-ic" data-i="history"></span><span class="row-t"><b data-t="history"></b><small id="hist-sub"></small></span><span class="row-go" data-i="chevron"></span></button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-h"><h3 data-t="settings"></h3></div>
+        <div class="list">
+          <button class="row" id="set-lang" type="button"><span class="row-ic" data-i="lang"></span><span class="row-t" data-t="language"></span><span class="row-v" id="lang-v"></span><span class="row-go" data-i="chevron"></span></button>
+          <button class="row" id="set-tour" type="button"><span class="row-ic" data-i="book"></span><span class="row-t" data-t="howto"></span><span class="row-go" data-i="chevron"></span></button>
+          <button class="row" id="set-support" type="button"><span class="row-ic" data-i="chat"></span><span class="row-t" data-t="support"></span><span class="row-go" data-i="external"></span></button>
+          <button class="row" type="button" data-legal="terms"><span class="row-ic" data-i="book"></span><span class="row-t" data-t="terms"></span><span class="row-go" data-i="chevron"></span></button>
+          <button class="row" type="button" data-legal="privacy"><span class="row-ic" data-i="shield"></span><span class="row-t" data-t="privacy"></span><span class="row-go" data-i="chevron"></span></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button type="button" data-tab="market" class="is-on"><span data-i="home"></span><b data-t="tab_market"></b></button>
+    <button type="button" data-tab="orders"><span data-i="bag"></span><b data-t="tab_orders"></b></button>
+    <button type="button" data-tab="gw"><span data-i="gift"></span><b data-t="tab_gw"></b></button>
+    <button type="button" data-tab="wallet"><span data-i="wallet"></span><b data-t="tab_wallet"></b></button>
+  </nav>
+</div>
+
+<div class="sheet-wrap" id="sheet-wrap" hidden>
+  <div class="sheet-bg" id="sheet-bg"></div>
+  <div class="sheet" id="sheet"><div class="sheet-grip"></div><div id="sheet-body"></div></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="static/icons.js?v=5"></script>
+<script src="static/i18n.js?v=5"></script>
+<script src="static/app.js?v=5"></script>
+</body>
+</html>

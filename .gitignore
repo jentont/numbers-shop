@@ -1,0 +1,8 @@
+.env
+data/
+__pycache__/
+*.db
+*.db-*
+*.db.gz
+.claude/
+*.log
