@@ -110,6 +110,25 @@ async def main():
     check("на паузе новые покупки не начинаются (деньги не списываются)", paused)
     asyncio.sleep = real_sleep
 
+    # продавцы: чёрный список, новички, «восстановители», автобан по жалобам
+    import config
+    norm = lambda sid, name, sold, rest, banned=0: lzt.normalize({  # noqa: E731
+        "item_id": sid, "telegram_country": "RU", "price": 20,
+        "seller": {"user_id": sid, "username": name, "sold_items_count": sold, "restore_percents": rest,
+                   "is_banned": banned}})
+    check("AccPoint из чёрного списка не продаётся", not lzt.seller_ok(norm(1, "AccPoint", 35796, 0)))
+    check("новичок (5 продаж) не продаётся", not lzt.seller_ok(norm(2, "newbie", 5, 0)))
+    check("продавец с 40% восстановлений не продаётся", not lzt.seller_ok(norm(3, "thief", 900, 40)))
+    check("забаненный продавец не продаётся", not lzt.seller_ok(norm(4, "ban", 900, 0, 1)))
+    good = norm(5, "goodshop", 900, 2)
+    check("нормальный продавец продаётся", lzt.seller_ok(good))
+    for _ in range(config.SELLER_STRIKES):
+        await shop.seller_strike({"seller": "goodshop", "seller_id": 5})
+    check(f"{config.SELLER_STRIKES} нерабочих аккаунта — продавец сам попал в чёрный список",
+          not lzt.seller_ok(good) and "goodshop" in config.SELLER_BLACKLIST)
+    await shop.seller_ban("goodshop", on=False)
+    check("/seller_unban возвращает продавца", lzt.seller_ok(good))
+
     print("\nПОИСК LZT: ВСЁ В ПОРЯДКЕ" if not FAILS else f"\nОШИБКИ: {len(FAILS)}")
     sys.exit(1 if FAILS else 0)
 

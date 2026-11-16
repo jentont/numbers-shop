@@ -120,7 +120,37 @@ def normalize(it: dict) -> dict:
         "dc": int(_num(it.get("telegram_dc_id"), 0)),
         "last_seen": last_seen,
         "session_days": int((time.time() - created) / 86400) if created else 0,
+        **_seller(it.get("seller")),
     }
+
+
+def _seller(s) -> dict:
+    s = s if isinstance(s, dict) else {}
+    return {
+        "seller_id": int(_num(s.get("user_id"), 0)),
+        "seller": str(s.get("username") or "")[:40],
+        "seller_sold": int(_num(s.get("sold_items_count"), 0)),
+        "seller_restore": int(_num(s.get("restore_percents"), 0)),
+        "seller_banned": _yes(s.get("is_banned")),
+    }
+
+
+def seller_ok(lot: dict) -> bool:
+    """Продавец проходит: не в чёрном списке, не забанен, достаточно продаж, мало восстановлений.
+
+    Демо-лоты (без продавца) проходят. Отзывов и «качества 0/100» в API нет,
+    поэтому опираемся на то, что есть, плюс свой чёрный список и автобан по жалобам.
+    """
+    if not lot.get("seller_id") and not lot.get("seller"):
+        return True
+    banned = {x.strip().lower() for x in config.SELLER_BLACKLIST.split(",") if x.strip()}
+    if lot.get("seller", "").lower() in banned or str(lot.get("seller_id")) in banned:
+        return False
+    if lot.get("seller_banned"):
+        return False
+    if lot.get("seller_sold", 0) < config.SELLER_MIN_SOLD:
+        return False
+    return lot.get("seller_restore", 0) <= config.SELLER_MAX_RESTORE
 
 
 def _login(item: dict) -> tuple[str, str]:
@@ -159,6 +189,7 @@ async def search(country: str = "", pmin: float = 0, pmax: float = 0, premium: s
             lots = [x for x in lots if not x["spam"]]
         if config.LZT_ORIGINS:
             lots = [x for x in lots if not x["origin"] or x["origin"] in config.LZT_ORIGINS]
+        lots = [x for x in lots if seller_ok(x)]
     lots = [x for x in lots if x["id"] and x["cost"] > 0 and x["country"]]
     _cache[key] = (time.time(), lots)
     return lots
@@ -207,6 +238,7 @@ async def crawl(order: str, pages: int) -> list[dict]:
         out = [x for x in out if not x["spam"]]
     if config.LZT_ORIGINS:
         out = [x for x in out if not x["origin"] or x["origin"] in config.LZT_ORIGINS]
+    out = [x for x in out if seller_ok(x)]
     return [x for x in out if x["id"] and x["cost"] > 0 and x["country"]]
 
 

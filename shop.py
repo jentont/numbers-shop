@@ -68,7 +68,9 @@ def allowed_lot(lot: dict | None) -> bool:
     if config.LZT_NO_SPAM and lot.get("spam"):
         return False
     origin = lot.get("origin") or ""
-    return not origin or origin in config.LZT_ORIGINS
+    if origin and origin not in config.LZT_ORIGINS:
+        return False
+    return lzt.seller_ok(lot)
 
 
 # ── Цены ──────────────────────────────────────────────────────────────
@@ -358,11 +360,12 @@ async def _buy_lot(uid: int, item_id: int, expected: int) -> dict:
     if not await db.take_kop(uid, price, "buy", f"lzt#{item_id}"):
         raise ShopError("no_money", need=price)
     oid = await db.create_order(uid, "live", item_id, lot["country"], int(round(lot["cost"] * 100)), price)
-    asyncio.create_task(_fulfil(oid, item_id, lot["cost"]))
+    asyncio.create_task(_fulfil(oid, item_id, lot["cost"], {"seller": lot.get("seller", ""),
+                                                            "seller_id": lot.get("seller_id", 0)}))
     return await order_view(await db.get_order(oid))
 
 
-async def _fulfil(oid: int, item_id: int, cost: float) -> None:
+async def _fulfil(oid: int, item_id: int, cost: float, seller: dict | None = None) -> None:
     order = await db.get_order(oid)
     uid = int(order["user_id"])
     try:
@@ -388,7 +391,9 @@ async def _fulfil(oid: int, item_id: int, cost: float) -> None:
             await _admin_note(f"{emoji.tag('↩️')} Заказ #{oid} не куплен на LZT, деньги вернули: {exc}")
         return
     LZT_STATE.update(buy_fails=0)
-    await db.finish_order(oid, got["phone"], got["password"], got["raw"], int(round(got["cost"] * 100)))
+    # Продавец — в данные заказа: по нему считаются жалобы «не работает».
+    await db.finish_order(oid, got["phone"], got["password"], {**got["raw"], **(seller or {})},
+                          int(round(got["cost"] * 100)))
     await notify(uid, "done", order=oid, phone=got["phone"])
     await _admin_note(f"{emoji.tag('🛒')} Продажа #{oid}: {emoji.tag(flag(order['country']))}{name_ru(order['country'])} · "
                       f"{money(int(order['price_kop']))} (закупка {money(int(round(got['cost'] * 100)))})\n"
@@ -434,7 +439,39 @@ async def report(uid: int, oid: int) -> dict:
         await db.add_kop(uid, int(o["price_kop"]), "refund", f"invalid#{oid}")
     await _admin_note(f"{emoji.tag('🛡')} Заказ #{oid} невалиден — LZT вернёт закупку, покупателю вернули "
                       f"{money(int(o['price_kop']))}\n{await who(uid)}")
+    await seller_strike(json.loads(o["info"] or "{}"))
     return {"result": "refunded"}
+
+
+async def seller_strike(info: dict) -> None:
+    """Ещё один нерабочий аккаунт от продавца. SELLER_STRIKES штук — продавец в чёрном списке."""
+    name = str(info.get("seller") or "").strip()
+    sid = str(info.get("seller_id") or "").strip()
+    key = name or sid
+    if not key or key == "0":
+        return
+    strikes = json.loads(await db.get_setting("seller_strikes", "{}") or "{}")
+    strikes[key] = int(strikes.get(key, 0)) + 1
+    await db.set_setting("seller_strikes", json.dumps(strikes, ensure_ascii=False))
+    if strikes[key] >= config.SELLER_STRIKES:
+        await seller_ban(key)
+        await _admin_note(f"{emoji.tag('🛡')} Продавец <b>{html.escape(key)}</b> в чёрном списке: "
+                          f"{strikes[key]} нерабочих аккаунтов. Его лоты больше не продаём. Вернуть: /seller_unban {html.escape(key)}")
+
+
+async def seller_ban(key: str, on: bool = True) -> str:
+    items = [x.strip() for x in config.SELLER_BLACKLIST.split(",") if x.strip()]
+    low = {x.lower() for x in items}
+    if on and key.lower() not in low:
+        items.append(key)
+    if not on:
+        items = [x for x in items if x.lower() != key.lower()]
+    value = ",".join(items)
+    await db.set_override("SELLER_BLACKLIST", value)
+    # Убираем его лоты из витрины сразу, не дожидаясь следующего обхода.
+    for c3, (ts, lots) in list(SNAP.items()):
+        SNAP[c3] = (ts, [x for x in lots if lzt.seller_ok(x)])
+    return value
 
 
 async def get_code(uid: int, oid: int) -> dict:

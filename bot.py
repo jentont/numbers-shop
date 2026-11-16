@@ -357,6 +357,7 @@ ADMIN_HELP = (
     "/lzt — почему нет лотов: токен, баланс, поиск\n"
     "/lzt_check ID — проверить лот перед покупкой (бесплатно), /lzt_buy ID — купить через API\n"
     "/buy_on — снять паузу покупок\n"
+    "/seller_ban НИК — не продавать лоты продавца, /seller_unban НИК — вернуть\n"
     "/emoji_list — какие премиум-эмодзи найдены, /emoji_set 📱 + премиум — заменить"
 )
 
@@ -536,6 +537,18 @@ async def lzt_try(m: Message, command: CommandObject) -> None:
                        f"<code>{html.escape(str(exc))[:1500]}</code>")
 
 
+@router.message(Command("seller_ban", "seller_unban"))
+async def seller_cmd(m: Message, command: CommandObject) -> None:
+    if not _is_admin(m.from_user.id):
+        return
+    key = (command.args or "").strip().lstrip("@")
+    if not key:
+        return await m.answer(f"Формат: /{command.command} AccPoint (ник или ID продавца на LZT)\n"
+                              f"Сейчас в чёрном списке: {html.escape(config.SELLER_BLACKLIST) or '—'}")
+    value = await shop.seller_ban(key, on=command.command == "seller_ban")
+    await m.answer(f"Чёрный список продавцов: {html.escape(value) or '—'}")
+
+
 @router.message(Command("buy_on"))
 async def buy_on(m: Message) -> None:
     if _is_admin(m.from_user.id):
@@ -587,6 +600,20 @@ async def lzt_diag(m: Message) -> None:
         except Exception as exc:  # noqa: BLE001
             lines.append(f"Проверка перед покупкой (лот {cheapest['id']}): <b>ошибка</b> "
                          f"<code>{html.escape(str(exc))[:250]}</code>")
+    from collections import defaultdict
+    sellers: dict = defaultdict(lambda: [0, 0, 0])
+    for _, (_, lots) in shop.SNAP.items():
+        for x in lots:
+            if x.get("seller"):
+                s = sellers[x["seller"]]
+                s[0] += 1
+                s[1], s[2] = x.get("seller_sold", 0), x.get("seller_restore", 0)
+    top = sorted(sellers.items(), key=lambda kv: -kv[1][0])[:8]
+    if top:
+        lines.append("Продавцы в витрине (лотов · продаж · % восстановл.): " + "; ".join(
+            f"{html.escape(k)} {v[0]}·{v[1]}·{v[2]}%" for k, v in top))
+    lines.append(f"Фильтр продавцов: от {config.SELLER_MIN_SOLD} продаж, восстановлений ≤ {config.SELLER_MAX_RESTORE}%, "
+                 f"чёрный список: {html.escape(config.SELLER_BLACKLIST) or '—'}")
     found = await lzt.probe_country_format()
     lines.append("Фильтр страны (Россия): " + ", ".join(f"{k}={'ошибка' if v < 0 else v}" for k, v in found.items())
                  + f" → {lzt.COUNTRY_FMT['fmt']}")

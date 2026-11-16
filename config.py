@@ -63,7 +63,14 @@ LZT_DEMO = _b("LZT_DEMO", not LZT_TOKEN)
 #: способов происхождения (autoreg — авторег, самый дешёвый и массовый).
 LZT_ORIGINS = [x for x in _s("LZT_ORIGINS", "autoreg,self_registration,personal,resale").split(",") if x]
 LZT_NO_SPAM = _b("LZT_NO_SPAM", True)
-LZT_MAX_PRICE = _f("LZT_MAX_PRICE", 3000)              # дороже — не продаём вовсе
+LZT_MAX_PRICE = _f("LZT_MAX_PRICE", 3000)
+#: Продавцы: у новичков и тех, кто «восстанавливает» проданные аккаунты, не покупаем.
+SELLER_MIN_SOLD = _i("SELLER_MIN_SOLD", 50)            # минимум продаж у продавца
+SELLER_MAX_RESTORE = _i("SELLER_MAX_RESTORE", 10)      # не больше % восстановленных аккаунтов
+#: Чёрный список продавцов: ник или ID через запятую (регистр не важен).
+SELLER_BLACKLIST = _s("SELLER_BLACKLIST", "AccPoint")
+#: Столько подтверждённых «не работает» по аккаунтам продавца — и он в чёрном списке сам.
+SELLER_STRIKES = _i("SELLER_STRIKES", 3)              # дороже — не продаём вовсе
 CACHE_TTL = _i("CACHE_TTL", 90)
 #: Общий обход каталога за цикл: дешёвые + новые страницы (по ~40 лотов). 30 + 30 ≈ 2 400 лотов;
 #: новые лоты идут вперемешку по странам — они дают разнообразие стран.
@@ -150,6 +157,7 @@ EDITABLE: dict[str, type] = {
     "REF_GOAL": int, "REF_PRIZE_MAX": float, "REF_DAILY_MAX": int,
     "MAX_PER_DAY": int, "MAX_PER_DAY_NEW": int, "GUARANTEE_H": int,
     "TOPUP_MIN": float, "LZT_MAX_PRICE": float,
+    "SELLER_MIN_SOLD": int, "SELLER_MAX_RESTORE": int, "SELLER_BLACKLIST": str, "SELLER_STRIKES": int,
     "CHANNEL": str, "CHANNEL_URL": str, "SUPPORT": str, "SUB_REQUIRED": bool,
 }
 
