@@ -336,6 +336,7 @@ def app() -> web.Application:
     a = web.Application(client_max_size=64 * 1024)
     r = a.router
     r.add_get("/", index)
+    r.add_get("/health", lambda req: web.Response(text="ok"))  # проверка для хостинга, без авторизации
     r.add_get("/api/me", me)
     r.add_post("/api/lang", set_lang)
     r.add_post("/api/tour", tour_done)

@@ -1,0 +1,17 @@
+# Свой сервер: docker compose up -d --build
+# Mini App нужен https-адрес (WEBAPP_URL) — поставьте перед контейнером nginx/Caddy или cloudflared.
+services:
+  bot:
+    build: .
+    container_name: numbers-shop
+    env_file: .env
+    environment:
+      PORT: "3000"
+    ports:
+      - "8090:3000"
+    volumes:
+      - numbers-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  numbers-data:
