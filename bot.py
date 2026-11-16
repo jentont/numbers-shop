@@ -121,10 +121,11 @@ async def _send(bot: Bot, chat_id: int, text: str, kb_fn, lang: str, photo: bool
                 send = {"photo": bot.send_photo, "animation": bot.send_animation, "video": bot.send_video}[kind]
                 await send(chat_id, media, caption=text, reply_markup=kb)
             elif photo and BANNER.exists():
-                fid = await db.get_setting("banner_file_id")
+                fkey = f"banner_file_id:{BANNER.stat().st_size}:{int(BANNER.stat().st_mtime)}"
+                fid = await db.get_setting(fkey)
                 msg = await bot.send_photo(chat_id, fid or FSInputFile(BANNER), caption=text, reply_markup=kb)
                 if not fid and msg.photo:
-                    await db.set_setting("banner_file_id", msg.photo[-1].file_id)
+                    await db.set_setting(fkey, msg.photo[-1].file_id)
             else:
                 await bot.send_message(chat_id, text, reply_markup=kb)
             return
@@ -136,7 +137,7 @@ async def _send(bot: Bot, chat_id: int, text: str, kb_fn, lang: str, photo: bool
                 text = _plain(text)
                 continue
             if attempt == 0 and "file" in low:
-                await db.set_setting("banner_file_id", "")
+                await db.set_setting(f"banner_file_id:{BANNER.stat().st_size}:{int(BANNER.stat().st_mtime)}", "")
                 continue
             raise
 
