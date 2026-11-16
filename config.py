@@ -64,7 +64,11 @@ LZT_DEMO = _b("LZT_DEMO", not LZT_TOKEN)
 LZT_ORIGINS = [x for x in _s("LZT_ORIGINS", "autoreg,self_registration,personal,resale").split(",") if x]
 LZT_NO_SPAM = _b("LZT_NO_SPAM", True)
 LZT_MAX_PRICE = _f("LZT_MAX_PRICE", 3000)              # дороже — не продаём вовсе
-CACHE_TTL = _i("CACHE_TTL", 90)                        # секунд держим выдачу LZT
+CACHE_TTL = _i("CACHE_TTL", 90)
+#: Общий обход каталога за цикл: дешёвые + новые страницы (по ~40 лотов). 30 + 10 ≈ 1 500 лотов.
+CRAWL_CHEAP_PAGES = _i("CRAWL_CHEAP_PAGES", 30)
+CRAWL_NEW_PAGES = _i("CRAWL_NEW_PAGES", 10)
+CRAWL_EVERY = _i("CRAWL_EVERY", 180)                   # секунд между обходами                        # секунд держим выдачу LZT
 
 # ── Цены ──────────────────────────────────────────────────────────────
 MARKUP = _f("MARKUP", 0.10)                            # +10 % к цене LZT

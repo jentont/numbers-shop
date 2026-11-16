@@ -47,14 +47,8 @@ function ic(name, cls = "ic") {
 function paintIcons(root = document) { $$("[data-i]", root).forEach((el) => { if (!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin", ic(el.dataset.i)); }); }
 
 // ── страны ──────────────────────────────────────────────────────────
-const C = { RUS:["RU","7"],UKR:["UA","380"],KAZ:["KZ","7"],BLR:["BY","375"],UZB:["UZ","998"],KGZ:["KG","996"],TJK:["TJ","992"],GEO:["GE","995"],ARM:["AM","374"],AZE:["AZ","994"],MDA:["MD","373"],USA:["US","1"],CAN:["CA","1"],GBR:["GB","44"],DEU:["DE","49"],FRA:["FR","33"],ITA:["IT","39"],ESP:["ES","34"],PRT:["PT","351"],NLD:["NL","31"],POL:["PL","48"],CZE:["CZ","420"],ROU:["RO","40"],TUR:["TR","90"],ISR:["IL","972"],ARE:["AE","971"],SAU:["SA","966"],EGY:["EG","20"],NGA:["NG","234"],KEN:["KE","254"],ZAF:["ZA","27"],GHA:["GH","233"],IND:["IN","91"],PAK:["PK","92"],BGD:["BD","880"],LKA:["LK","94"],NPL:["NP","977"],IDN:["ID","62"],PHL:["PH","63"],VNM:["VN","84"],THA:["TH","66"],MYS:["MY","60"],MMR:["MM","95"],KHM:["KH","855"],LAO:["LA","856"],CHN:["CN","86"],JPN:["JP","81"],KOR:["KR","82"],BRA:["BR","55"],MEX:["MX","52"],ARG:["AR","54"],COL:["CO","57"],PER:["PE","51"],CHL:["CL","56"],AUS:["AU","61"] };
-const REGIONS = {
-  cis: "RUS UKR KAZ BLR UZB KGZ TJK GEO ARM AZE MDA",
-  eu: "GBR DEU FRA ITA ESP PRT NLD POL CZE ROU",
-  asia: "TUR ISR ARE SAU IND PAK BGD LKA NPL IDN PHL VNM THA MYS MMR KHM LAO CHN JPN KOR",
-  am: "USA CAN BRA MEX ARG COL PER CHL",
-  af: "EGY NGA KEN ZAF GHA AUS",
-};
+const C = window.NUM_COUNTRIES || {};   // из webapp/countries.js (tools/gen_countries.py)
+const REGIONS = window.NUM_REGIONS || {};
 const iso2 = (c3) => (C[c3] || ["", ""])[0];
 const dial = (c3) => (C[c3] || ["", ""])[1];
 // Флаги — свои SVG (эмодзи-флагов нет на Windows и в Telegram Desktop).

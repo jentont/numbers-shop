@@ -151,14 +151,10 @@ async def search(country: str = "", pmin: float = 0, pmax: float = 0, premium: s
         # В маркет — только надёжные параметры. Фильтры по спамблоку и
         # происхождению применяем у себя: если маркет не примет хоть одно
         # значение фильтра, он отдаёт ошибку на весь поиск и каталог пустеет.
-        lots = await _fetch(country, pmin, pmax, premium, order, pages, COUNTRY_FMT["fmt"])
-        if country and not lots and COUNTRY_FMT["fmt"] == "iso3":
-            # Нет лотов по RUS — пробуем RU; подошло — запоминаем формат.
-            alt = await _fetch(country, pmin, pmax, premium, order, pages, "iso2")
-            if alt:
-                COUNTRY_FMT["fmt"] = "iso2"
-                log.warning("LZT: страны принимаются в формате ISO-2 (RU), переключился")
-                lots = alt
+        if country and COUNTRY_FMT["fmt"] == "none":
+            lots = []          # фильтр страны маркет не понимает — страну берём из общего обхода
+        else:
+            lots = await _fetch(country, pmin, pmax, premium, order, pages, COUNTRY_FMT["fmt"])
         if config.LZT_NO_SPAM:
             lots = [x for x in lots if not x["spam"]]
         if config.LZT_ORIGINS:
@@ -168,28 +164,68 @@ async def search(country: str = "", pmin: float = 0, pmax: float = 0, premium: s
     return lots
 
 
-#: В каком виде маркет принимает страну в поиске: "iso3" (RUS) или "iso2" (RU).
-COUNTRY_FMT = {"fmt": "iso3"}
+#: В каком виде маркет принимает страну в фильтре поиска. Схема API пишет просто
+#: «строка», поэтому формат подбирается при запуске (probe_country_format):
+#: iso3 (RUS) · iso2 (RU) · lower (ru) · name (Russia) · none (фильтр не работает).
+COUNTRY_FMT = {"fmt": "iso3", "probed": False}
+FORMATS = ("iso3", "iso2", "lower", "name")
+
+
+def _country_value(country: str, fmt: str) -> str:
+    from countries import _EN_NAMES, iso2
+    return {"iso3": country, "iso2": iso2(country), "lower": iso2(country).lower(),
+            "name": _EN_NAMES.get(country, country)}.get(fmt, country)
+
+
+async def probe_country_format() -> dict[str, int]:
+    """Пробует форматы страны на России. Возвращает {формат: найдено лотов}."""
+    found: dict[str, int] = {}
+    for fmt in FORMATS:
+        try:
+            data = await _call("GET", "/telegram", params=[("order_by", "price_to_up"), ("currency", "rub"),
+                                                           ("country[]", _country_value("RUS", fmt))])
+            found[fmt] = int(data.get("totalItems") or len(data.get("items") or []))
+        except LztError as exc:
+            log.info("формат страны %s: %s", fmt, exc)
+            found[fmt] = -1
+    best = next((f for f in FORMATS if found.get(f, 0) > 0), "none")
+    COUNTRY_FMT.update(fmt=best, probed=True)
+    log.warning("LZT: фильтр страны — формат %s (%s)", best, found)
+    return found
+
+
+async def crawl(order: str, pages: int) -> list[dict]:
+    """Общий каталог без фильтра страны: pages страниц подряд. Страны раскладываем у себя."""
+    out: list[dict] = []
+    for page in range(1, pages + 1):
+        data = await _call("GET", "/telegram", params=[("order_by", order), ("currency", "rub"),
+                                                       ("pmax", config.LZT_MAX_PRICE), ("page", page)])
+        out += [normalize(i) for i in data.get("items") or []]
+        if not data.get("hasNextPage"):
+            break
+    if config.LZT_NO_SPAM:
+        out = [x for x in out if not x["spam"]]
+    if config.LZT_ORIGINS:
+        out = [x for x in out if not x["origin"] or x["origin"] in config.LZT_ORIGINS]
+    return [x for x in out if x["id"] and x["cost"] > 0 and x["country"]]
 
 
 async def _fetch(country: str, pmin: float, pmax: float, premium: str, order: str, pages: int,
                  fmt: str) -> list[dict]:
-    from countries import iso2
     params: list[tuple[str, Any]] = [("order_by", order), ("currency", "rub")]
     if country:
-        params.append(("country[]", iso2(country) if fmt == "iso2" else country))
+        params.append(("country[]", _country_value(country, fmt)))
     if pmin:
         params.append(("pmin", pmin))
     params.append(("pmax", pmax or config.LZT_MAX_PRICE))
     if premium in ("yes", "no"):
         params.append(("premium", premium))
-    lots, after = [], None
-    for _ in range(max(1, pages)):
-        page = params + ([("after", after)] if after else [])
-        data = await _call("GET", "/telegram", params=page)
+    lots = []
+    # Страницы у маркета — параметр page (1, 2, …); курсора after у него нет.
+    for page in range(1, max(1, pages) + 1):
+        data = await _call("GET", "/telegram", params=params + [("page", page)])
         lots += [normalize(i) for i in data.get("items") or []]
-        after = data.get("nextCursor")
-        if not data.get("hasNextPage") or not after:
+        if not data.get("hasNextPage"):
             break
     # Без фильтра по стране в ответе могут быть любые страны — оставляем свою.
     return [x for x in lots if not country or x["country"] == country]

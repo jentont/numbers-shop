@@ -31,14 +31,8 @@ log = logging.getLogger("numbers.text")
 router = Router(name="text")
 
 PER_C, PER_L, PER_O = 8, 6, 6
-REGIONS = {
-    "all": None,
-    "cis": "RUS UKR KAZ BLR UZB KGZ TJK GEO ARM AZE MDA",
-    "eu": "GBR DEU FRA ITA ESP PRT NLD POL CZE ROU",
-    "asia": "TUR ISR ARE SAU IND PAK BGD LKA NPL IDN PHL VNM THA MYS MMR KHM LAO CHN JPN KOR",
-    "am": "USA CAN BRA MEX ARG COL PER CHL",
-    "af": "EGY NGA KEN ZAF GHA AUS",
-}
+import countries as _countries
+REGIONS = {"all": None} | {k: " ".join(v) for k, v in _countries.REGIONS.items()}
 #: Ждём от человека текст: промокод, перевод или своя сумма пополнения.
 WAIT: dict[int, tuple[str, float]] = {}
 

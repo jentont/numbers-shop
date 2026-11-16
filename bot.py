@@ -530,7 +530,12 @@ async def lzt_diag(m: Message) -> None:
         lines.append(f"{title}: лотов {len(items)} из {data.get('totalItems', '?')}; страны в ответе: "
                      + html.escape(", ".join(f"{k}×{v}" for k, v in raw.most_common(8)) or "—")
                      + (f"; <b>не распознаны</b>: {html.escape(', '.join(unknown[:8]))}" if unknown else ""))
-    lines.append(f"\nВ витрине сейчас стран: {sum(1 for _, (_, lots) in shop.SNAP.items() if lots)}")
+    found = await lzt.probe_country_format()
+    lines.append("Фильтр страны (Россия): " + ", ".join(f"{k}={'ошибка' if v < 0 else v}" for k, v in found.items())
+                 + f" → {lzt.COUNTRY_FMT['fmt']}")
+    total = sum(len(v[1]) for v in shop.SNAP.values())
+    lines.append(f"\nВ витрине: <b>{total}</b> аккаунтов, стран {sum(1 for _, (_, x) in shop.SNAP.items() if x)} "
+                 f"(обход: {config.CRAWL_CHEAP_PAGES}+{config.CRAWL_NEW_PAGES} стр. раз в {config.CRAWL_EVERY} с)")
     await m.answer("\n".join(lines))
 
 

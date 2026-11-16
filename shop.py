@@ -37,7 +37,7 @@ SNAP: dict[str, tuple[float, list[dict]]] = {}
 ARRIVALS: list[dict] = []
 _seen: dict[str, set[int]] = {}
 #: Последний успех и последняя ошибка LZT — для витрины, /lzt и админки.
-LZT_STATE: dict = {"ok_at": 0.0, "error": "", "error_at": 0.0}
+LZT_STATE: dict = {"ok_at": 0.0, "error": "", "error_at": 0.0, "crawled": 0}
 _code_at: dict[int, float] = {}
 #: Покупки одного человека идут строго по очереди: иначе 50 параллельных
 #: запросов проскочат проверки (лимит, бан) одновременно.
@@ -118,23 +118,60 @@ async def refresh_country(c3: str) -> list[dict]:
     return lots
 
 
+def _ingest(lots: list[dict]) -> None:
+    """Раскладывает лоты общего обхода по странам и отмечает «завоз»."""
+    by: dict[str, dict[int, dict]] = {}
+    for x in lots:
+        if x["country"] in COUNTRIES:
+            by.setdefault(x["country"], {})[x["id"]] = x
+    now = time.time()
+    for c3, items in by.items():
+        lst = sorted(items.values(), key=lambda x: x["cost"])
+        before = _seen.get(c3)
+        if before is not None:
+            new = [x for x in lst if x["id"] not in before]
+            if len(new) >= 3:
+                ARRIVALS.insert(0, {"country": c3, "count": len(new), "at": int(now),
+                                    "from": min(x["cost"] for x in new)})
+                del ARRIVALS[40:]
+        _seen[c3] = {x["id"] for x in lst}
+        SNAP[c3] = (now, lst)
+    for c3 in list(SNAP):
+        if c3 not in by and now - SNAP[c3][0] > 3 * config.CRAWL_EVERY:
+            SNAP.pop(c3)          # страна пропала из выдачи надолго — убираем
+
+
 async def snapshot_worker() -> None:
-    """По кругу обновляет все страны: ~12 запросов в минуту к LZT."""
-    order = list(COUNTRIES)
-    while True:
-        for c3 in order:
-            try:
-                await refresh_country(c3)
-                LZT_STATE.update(ok_at=time.time(), error="")
-            except Exception as exc:  # noqa: BLE001 — одна страна не роняет остальные
-                # Не молчим: без этого пустой каталог выглядит как «нет товара».
-                LZT_STATE.update(error=f"{type(exc).__name__}: {exc}"[:300], error_at=time.time())
-                log.warning("LZT, страна %s: %s", c3, exc)
-                await _admin_note(f"{emoji.tag('🛡')} LZT не отдаёт лоты: {html.escape(str(exc))[:300]}\n"
-                                  "Проверьте LZT_TOKEN (право market) и баланс. Подробно: /lzt", key="lzt_down")
-            await asyncio.sleep(0.2 if config.LZT_DEMO else 5)
-        if config.LZT_DEMO:
+    """Витрина из общего обхода каталога LZT: ~40 запросов раз в CRAWL_EVERY секунд.
+
+    Фильтр страны у маркета ненадёжен, поэтому берём дешёвые и новые лоты
+    всего каталога страницами и раскладываем по странам у себя.
+    """
+    if config.LZT_DEMO:
+        while True:
+            for c3 in COUNTRIES:
+                try:
+                    await refresh_country(c3)
+                except Exception:  # noqa: BLE001
+                    pass
+                await asyncio.sleep(0.05)
             await asyncio.sleep(60)
+    while True:
+        try:
+            if not lzt.COUNTRY_FMT["probed"]:
+                await lzt.probe_country_format()
+            cheap = await lzt.crawl("price_to_up", config.CRAWL_CHEAP_PAGES)
+            fresh = await lzt.crawl("pdate_to_down", config.CRAWL_NEW_PAGES)
+            _ingest(cheap + fresh)
+            LZT_STATE.update(ok_at=time.time(), error="", crawled=len(cheap) + len(fresh))
+            log.info("витрина: %s лотов, %s стран", len(cheap) + len(fresh), len(SNAP))
+        except Exception as exc:  # noqa: BLE001 — воркер не умирает
+            # Не молчим: без этого пустой каталог выглядит как «нет товара».
+            LZT_STATE.update(error=f"{type(exc).__name__}: {exc}"[:300], error_at=time.time())
+            log.warning("LZT: %s", exc)
+            await _admin_note(f"{emoji.tag('🛡')} LZT не отдаёт лоты: {html.escape(str(exc))[:300]}\n"
+                              "Проверьте LZT_TOKEN (право market) и баланс. Подробно: /lzt", key="lzt_down")
+        await asyncio.sleep(config.CRAWL_EVERY)
 
 
 async def home() -> dict:
@@ -158,6 +195,7 @@ async def home() -> dict:
             "promo": promos.get(c3, 0),
         })
         fresh += [x for x in lots if x["published"] >= day_ago]
+    total_lots = sum(len(v[1]) for v in SNAP.values())
     countries.sort(key=lambda x: (-(x["instant"] > 0), -x["count"]))
     fresh.sort(key=lambda x: -x["published"])
     inst_cards = []
@@ -171,6 +209,7 @@ async def home() -> dict:
         "arrivals": ARRIVALS[:10],
         "instant": inst_cards,
         "demo": config.LZT_DEMO,
+        "total": total_lots,
         # Каталог пуст из-за сбоя маркета, а не потому, что товара нет.
         "market_down": not countries and bool(LZT_STATE["error"]),
     }
@@ -180,8 +219,12 @@ async def lots(country: str, f: dict) -> list[dict]:
     """Лоты страны с фильтрами витрины."""
     if country not in COUNTRIES:
         return []
-    items = await lzt.search(country=country, pages=2)
-    SNAP[country] = (time.time(), items)
+    items = await lzt.search(country=country, pages=3)
+    if items:
+        # Фильтр страны работает — дополняем витрину свежими лотами этой страны.
+        merged = {x["id"]: x for x in SNAP.get(country, (0, []))[1]} | {x["id"]: x for x in items}
+        SNAP[country] = (time.time(), sorted(merged.values(), key=lambda x: x["cost"]))
+    items = SNAP.get(country, (0, []))[1]
     promos = await _promos()
     out = []
     pmin, pmax = float(f.get("pmin") or 0) * 100, float(f.get("pmax") or 0) * 100
@@ -209,7 +252,7 @@ async def lots(country: str, f: dict) -> list[dict]:
         out.sort(key=lambda x: -x["session_days"])
     else:
         out.sort(key=lambda x: x["price"])
-    return out[:120]
+    return out[:600]
 
 
 def _cached_lot(item_id: int) -> dict | None:
