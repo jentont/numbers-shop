@@ -542,6 +542,42 @@ async def get_code(uid: int, oid: int) -> dict:
     return got
 
 
+# ── Деньги на LZT ──────────────────────────────────────────────────────
+
+async def check_lzt_funds() -> dict | None:
+    """Хватит ли денег на LZT, чтобы покупатели потратили свои балансы.
+
+    Покупатели пополняют баланс у нас (часто звёздами — они выводятся через
+    ~21 день), а покупка на маркете идёт сразу живыми рублями с баланса LZT.
+    Если на LZT меньше, чем лежит на балансах, — пишем админу, сколько
+    докинуть (не чаще раза в час). Возвращает цифры для проверки.
+    """
+    if config.LZT_DEMO:
+        return None
+    bal = await lzt.balance()
+    if bal is None:
+        return None
+    row = await db.one("SELECT COALESCE(SUM(kop),0) s, COUNT(*) n FROM users WHERE kop>0")
+    owed = int(row["s"]) / 100
+    reserve_need = 0.0
+    if config.RESERVE_SIZE > 0:
+        have = len(await db.reserve_ready())
+        reserve_need = max(0, config.RESERVE_SIZE - have) * config.RESERVE_MAX_PRICE
+    need = owed + reserve_need
+    info = {"lzt": bal, "owed": owed, "reserve": reserve_need, "short": max(0.0, need - bal), "users": row["n"]}
+    LZT_STATE["funds"] = info
+    if bal < need:
+        await _admin_note(
+            f"{emoji.tag('💳')} <b>На LZT мало денег</b>: {bal:.2f} ₽, а на балансах покупателей "
+            f"{owed:.2f} ₽ у {row['n']} чел."
+            + (f" и на докупку резерва нужно до {reserve_need:.0f} ₽" if reserve_need else "")
+            + f".\nПополните LZT минимум на <b>{need - bal:.0f} ₽</b>, иначе покупки начнут "
+            "отклоняться (деньги вернутся покупателям, но продажи будут упущены)."
+            + ("\nМожно выключить резерв: /admin → Настройки → RESERVE_SIZE = 0." if reserve_need else ""),
+            key="lzt_funds")
+    return info
+
+
 # ── Резерв ────────────────────────────────────────────────────────────
 
 async def keep_reserve() -> None:

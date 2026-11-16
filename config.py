@@ -131,6 +131,12 @@ PAY_TOLERANCE = _f("PAY_TOLERANCE", 0.98)
 POLL_INTERVAL = _i("POLL_INTERVAL", 30)
 
 
+def markup_pct() -> str:
+    """Наценка для текстов: 0.3 → «30», 0.125 → «12.5»."""
+    v = round(MARKUP * 100, 1)
+    return str(int(v)) if v == int(v) else str(v)
+
+
 def crypto_providers() -> list[str]:
     out = []
     if CRYPTOBOT_TOKEN:

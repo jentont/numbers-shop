@@ -27,12 +27,12 @@ NAME = "Solutions Numbers"
 
 #: Короткое описание — видно в профиле бота и при пересылке ссылки (до 120 символов).
 SHORT = {
-    "ru": "Telegram-аккаунты 50+ стран. Мгновенная выдача, цены на 10% выше маркета, гарантия 24 часа.",
-    "en": "Telegram accounts from 50+ countries. Instant delivery, 10% above market price, 24h guarantee.",
-    "es": "Cuentas de Telegram de 50+ países. Entrega al instante, 10% sobre el mercado, garantía 24 h.",
-    "ar": "حسابات تيليجرام من أكثر من 50 دولة. تسليم فوري، أعلى من السوق بـ10% فقط، ضمان 24 ساعة.",
-    "hi": "50+ देशों के Telegram अकाउंट। तुरंत डिलीवरी, बाज़ार से सिर्फ़ 10% ज़्यादा, 24 घंटे की गारंटी।",
-    "zh": "50 多个国家的 Telegram 账号。即时发货，仅比市场价高 10%，24 小时保障。",
+    "ru": "Telegram-аккаунты 50+ стран. Мгновенная выдача, цены на {m}% выше маркета, гарантия 24 часа.",
+    "en": "Telegram accounts from 50+ countries. Instant delivery, {m}% above market price, 24h guarantee.",
+    "es": "Cuentas de Telegram de 50+ países. Entrega al instante, {m}% sobre el mercado, garantía 24 h.",
+    "ar": "حسابات تيليجرام من أكثر من 50 دولة. تسليم فوري، أعلى من السوق بـ{m}% فقط، ضمان 24 ساعة.",
+    "hi": "50+ देशों के Telegram अकाउंट। तुरंत डिलीवरी, बाज़ार से सिर्फ़ {m}% ज़्यादा, 24 घंटे की गारंटी।",
+    "zh": "50 多个国家的 Telegram 账号。即时发货，仅比市场价高 {m}%，24 小时保障。",
 }
 
 #: Описание — экран «Что умеет этот бот?» до нажатия «Старт» (до 512 символов).
@@ -115,7 +115,7 @@ ADMIN_COMMANDS = [("admin", "Админ-панель"), ("lzt", "Провери�
 
 def _check() -> None:
     for lang, s in SHORT.items():
-        assert len(s) <= 120, f"short {lang}: {len(s)}"
+        assert len(s.format(m="12.5")) <= 120, f"short {lang}: {len(s)}"
     for lang, s in LONG.items():
         assert len(s) <= 512, f"long {lang}: {len(s)}"
 
@@ -123,14 +123,26 @@ def _check() -> None:
 _check()
 
 
+#: Наценка, с которой описание выставлено в последний раз.
+APPLIED = {"m": ""}
+
+
+async def refresh(bot: Bot) -> None:
+    """Наценку поменяли в админке — обновляем описание бота (раз в цикл воркера)."""
+    if APPLIED["m"] != config.markup_pct():
+        await apply(bot)
+
+
 async def apply(bot: Bot) -> None:
     """Выставляет профиль бота. Ошибки не роняют запуск — только пишутся в лог."""
+    APPLIED["m"] = config.markup_pct()
     for lang in [None, *SHORT]:
         key = lang or "en"            # без языка — английский, для всех остальных языков мира
         code = lang or ""
         try:
-            if (await bot.get_my_short_description(language_code=code)).short_description != SHORT[key]:
-                await bot.set_my_short_description(short_description=SHORT[key], language_code=code)
+            short = SHORT[key].format(m=config.markup_pct())
+            if (await bot.get_my_short_description(language_code=code)).short_description != short:
+                await bot.set_my_short_description(short_description=short, language_code=code)
             if (await bot.get_my_description(language_code=code)).description != LONG[key]:
                 await bot.set_my_description(description=LONG[key], language_code=code)
             await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in COMMANDS[key]],

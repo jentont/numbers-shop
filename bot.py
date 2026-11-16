@@ -103,7 +103,7 @@ def menu_text(lang: str, name: str, kop: int) -> str:
         # Свой текст из админки; {name} и {balance} подставляются, если есть.
         return MENU["text"].replace("{name}", html.escape(name or "")).replace("{balance}", shop.money(kop))
     return (f"{_e('👋')} <b>{html.escape(i18n.t('hi', lang, name=name or 'friend'))}</b>\n\n"
-            f"{_e('📱')} {i18n.t('menu', lang)}\n\n"
+            f"{_e('📱')} {i18n.t('menu', lang, m=config.markup_pct())}\n\n"
             f"{_e('💳')} <b>{shop.money(kop)}</b>")
 
 
@@ -578,6 +578,10 @@ async def lzt_diag(m: Message) -> None:
         return await m.answer("\n".join(lines + ["", "Задайте LZT_TOKEN, чтобы включить боевой режим."]))
     bal = await lzt.balance()
     lines.append(f"Баланс: {'не получен' if bal is None else f'{bal:.2f} ₽'}")
+    funds = await shop.check_lzt_funds()
+    if funds:
+        lines.append(f"На балансах покупателей: {funds['owed']:.2f} ₽"
+                     + (f" — <b>не хватает {funds['short']:.0f} ₽</b>" if funds["short"] > 0 else " — хватает"))
     for title, params in (("Все страны", [("order_by", "price_to_up"), ("currency", "rub")]),
                           ("Россия (RUS)", [("order_by", "price_to_up"), ("currency", "rub"), ("country[]", "RUS")]),
                           ("Россия (RU)", [("order_by", "price_to_up"), ("currency", "rub"), ("country[]", "RU")])):

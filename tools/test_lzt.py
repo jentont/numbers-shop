@@ -161,6 +161,37 @@ async def main():
     await shop.seller_ban("goodshop", on=False)
     check("/seller_unban возвращает продавца", lzt.seller_ok(good))
 
+    # деньги на LZT: меньше, чем на балансах покупателей — сигнал админу
+    notes = []
+
+    async def fake_note(text, key=""):
+        notes.append((key, text))
+
+    real_note = shop._admin_note  # noqa: SLF001
+    shop._admin_note = fake_note  # noqa: SLF001
+    real_balance = lzt.balance
+
+    async def low_balance():
+        return 100.0
+
+    lzt.balance = low_balance
+    config.RESERVE_SIZE = 0
+    await db.run("UPDATE users SET kop=0")
+    await db.add_kop(50, 35000, "admin")            # у покупателя 350 ₽
+    info = await shop.check_lzt_funds()
+    check("на LZT 100 ₽, на балансах 350 ₽ — не хватает 250 ₽", info and round(info["short"]) == 250)
+    check("админу пришёл сигнал «На LZT мало денег»", any(k == "lzt_funds" and "250" in t for k, t in notes))
+
+    async def rich():
+        return 1000.0
+
+    lzt.balance = rich
+    notes.clear()
+    info = await shop.check_lzt_funds()
+    check("денег хватает — сигнала нет", info["short"] == 0 and not notes)
+    lzt.balance = real_balance
+    shop._admin_note = real_note  # noqa: SLF001
+
     print("\nПОИСК LZT: ВСЁ В ПОРЯДКЕ" if not FAILS else f"\nОШИБКИ: {len(FAILS)}")
     sys.exit(1 if FAILS else 0)
 

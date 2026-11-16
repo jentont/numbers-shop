@@ -34,7 +34,11 @@ async def worker() -> None:
             loop = asyncio.get_running_loop()
             if loop.time() - last_reserve > 300:
                 last_reserve = loop.time()
+                await shop.check_lzt_funds()
                 await shop.keep_reserve()
+                if shop.bot is not None:
+                    import botprofile
+                    await botprofile.refresh(shop.bot)
             now = dt.datetime.now(shop.MSK)
             if config.GIVEAWAY_ON and now.hour == config.GIVEAWAY_HOUR:
                 row = await db.one("SELECT status FROM giveaways WHERE day=?", (shop.today(),))
