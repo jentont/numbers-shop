@@ -41,19 +41,20 @@ def _icons_on() -> bool:
 
 
 def _e(ch: str) -> str:
-    """Эмодзи для текста: премиум из набора, если он есть, иначе обычный."""
-    cid = emoji.ID.get(ch)
-    return f'<tg-emoji emoji-id="{cid}">{ch}</tg-emoji>' if cid else ch
+    """Премиум-эмодзи для текста. Нет премиума — пусто: обычные эмодзи не выводим."""
+    return emoji.tag(ch)
 
 
 def _btn(text: str, ch: str, **kw) -> InlineKeyboardButton:
-    icon = emoji.ID.get(ch) if _icons_on() else None
+    icon = emoji.get(ch) if _icons_on() else None
     if icon:
         return InlineKeyboardButton(text=text, icon_custom_emoji_id=icon, **kw)
-    # Без своего набора жёлтую звезду не показываем — только белый текстовый ☆.
-    return InlineKeyboardButton(text=f"{'☆' if ch == '⭐' else ch} {text}", **kw)
+    # Без премиум-иконки — только текст: обычный эмодзи на кнопку не ставим.
+    return InlineKeyboardButton(text=text, **kw)
 
 
+JOIN_OK = {"en": "You're in!", "ru": "Вы участвуете!", "es": "¡Estás dentro!", "ar": "أنت مشارك!",
+           "hi": "आप शामिल हैं!", "zh": "已参加！"}
 JOIN = {"en": "Join", "ru": "Участвовать", "es": "Participar", "ar": "شارك", "hi": "भाग लें", "zh": "参加"}
 
 
@@ -141,8 +142,10 @@ async def _send(bot: Bot, chat_id: int, text: str, kb_fn, lang: str, photo: bool
 
 
 def _plain(text: str) -> str:
+    """Убирает премиум-эмодзи целиком (если Telegram их не принял) — без замены на обычные."""
     import re
-    return re.sub(r'<tg-emoji emoji-id="\d+">(.*?)</tg-emoji>', r"\1", text)
+    text = re.sub(r'<tg-emoji emoji-id="\d+">.*?</tg-emoji>\s?', "", text)
+    return re.sub(r"(?m)^ +", "", text)
 
 
 # ── Пользователь ──────────────────────────────────────────────────────
@@ -161,6 +164,11 @@ async def start(m: Message, command: CommandObject) -> None:
         st = await shop.ref_state(inviter)
         await notify(inviter, "ref_new", name=m.from_user.first_name or "—",
                      n=st["invited"], goal=st["goal"])
+    import gate
+    if (gate.active() and m.from_user.id not in config.ADMIN_IDS
+            and not await shop.is_subscribed(m.from_user.id)):
+        gate.PENDING[m.from_user.id] = args
+        return await gate.send(m.bot, m.chat.id, lang)
     await _send(m.bot, m.chat.id, menu_text(lang, m.from_user.first_name, int(u["kop"])), menu_kb, lang)
     if args == "gw":
         await _gw_card(m.bot, m.chat.id, m.from_user.id, lang)
@@ -196,7 +204,7 @@ async def lang_menu(c: CallbackQuery) -> None:
     items = list(i18n.LANGS.items())
     rows = [[InlineKeyboardButton(text=name, callback_data=f"setlang:{code}") for code, name in items[i:i + 3]]
             for i in range(0, len(items), 3)]
-    await c.message.answer("🌐 Language / Язык", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await c.message.answer(f"{_e('🌐')} Language / Язык", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
     await c.answer()
 
 
@@ -247,7 +255,7 @@ async def gw_join(c: CallbackQuery) -> None:
     except shop.ShopError as exc:
         msg = "Подпишитесь на канал и нажмите ещё раз" if exc.code == "not_subscribed" else "Конкурс выключен"
         return await c.answer(msg, show_alert=True)
-    await c.answer("✅")
+    await c.answer(JOIN_OK.get(await _lang_of(c.from_user.id), JOIN_OK["en"]))
     try:
         await c.message.delete()
     except TelegramAPIError:
@@ -280,7 +288,7 @@ async def paid(m: Message) -> None:
     if (row is None or row["provider"] != "stars" or int(row["user_id"]) != m.from_user.id
             or sp.currency != "XTR" or int(row["amount"]) != sp.total_amount):
         log.error("звёзды: несовпадение счёта #%s: %s", inv_id, sp)
-        await shop._admin_note(f"⚠️ Оплата звёздами не совпала со счётом #{inv_id} — проверьте вручную\n"  # noqa: SLF001
+        await shop._admin_note(f"{_e('🛡')} Оплата звёздами не совпала со счётом #{inv_id} — проверьте вручную\n"  # noqa: SLF001
                                f"{await shop.who(m.from_user.id)}")
         return
     # Звёзды списаны — счёт зачисляем, даже если он успел «просрочиться».
@@ -343,7 +351,8 @@ ADMIN_HELP = (
     "/draw — провести конкурс дня сейчас\n"
     "/reserve — докупить резерв сейчас\n"
     "/emoji — создать/обновить свой набор премиум-эмодзи\n"
-    "/broadcast текст — рассылка всем"
+    "/broadcast текст — рассылка всем\n"
+    "/emoji_list — какие премиум-эмодзи найдены, /emoji_set 📱 + премиум — заменить"
 )
 
 
@@ -482,6 +491,35 @@ async def reserve_now(m: Message) -> None:
     if _is_admin(m.from_user.id):
         await shop.keep_reserve()
         await m.answer(f"Резерв: {len(await db.reserve_ready())} шт")
+
+
+@router.message(Command("emoji_set"))
+async def emoji_set(m: Message) -> None:
+    """/emoji_set 📱 <премиум-эмодзи> — какой премиум ставить вместо символа. Без премиума — сброс."""
+    if not _is_admin(m.from_user.id):
+        return
+    parts = (m.text or "").split(maxsplit=2)
+    if len(parts) < 2:
+        return await m.answer("Формат: /emoji_set 📱 и сразу премиум-эмодзи, которым его заменить")
+    ch = parts[1][:4]
+    cid = next((e.custom_emoji_id for e in (m.entities or []) if e.type == "custom_emoji"), "")
+    await emoji.set_manual(ch, cid or "")
+    await m.answer(f"Готово: {_e(ch) or 'сброшено'}" if cid else "Замена сброшена")
+
+
+@router.message(Command("emoji_list"))
+async def emoji_list(m: Message) -> None:
+    if not _is_admin(m.from_user.id):
+        return
+    have = [f"{_e(ch)} {emoji.SOURCES.get(ch, '')}" for ch in emoji.USED if emoji.get(ch)]
+    miss = [ch for ch in emoji.USED if not emoji.get(ch)]
+    text = (f"<b>Премиум-эмодзи</b>: пак {html.escape(emoji.PACK)} + свой набор\n\n" + "  ".join(have)
+            + (f"\n\n<b>Нет премиума</b> (на этих местах пусто): {' '.join(miss)}\n"
+               "Назначить: <code>/emoji_set 📱</code> + премиум-эмодзи" if miss else ""))
+    try:
+        await m.answer(text)
+    except TelegramAPIError:
+        await m.answer(_plain(text))
 
 
 @router.message(Command("emoji"))

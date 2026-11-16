@@ -21,6 +21,7 @@ from typing import Any
 
 import config
 import db
+import emoji
 import lzt
 from countries import COUNTRIES, flag, name_ru
 
@@ -270,7 +271,7 @@ async def _buy_instant(uid: int, country: str) -> dict:
             raise ShopError("no_money", need=price)
         oid = await db.create_order(uid, "reserve", int(r["item_id"]), country, int(r["cost_kop"]), price)
         await db.finish_order(oid, r["phone"], r["password"], json.loads(r["info"] or "{}"))
-        await _admin_note(f"⚡ Мгновенная продажа #{oid}: {flag(country)} {name_ru(country)} · "
+        await _admin_note(f"{emoji.tag('⚡')} Мгновенная продажа #{oid}: {emoji.tag(flag(country))}{name_ru(country)} · "
                           f"{money(price)} (закупка {money(int(r['cost_kop']))})\n{await who(uid)}")
         return await order_view(await db.get_order(oid))
     raise ShopError("sold_out")
@@ -313,11 +314,11 @@ async def _fulfil(oid: int, item_id: int, cost: float) -> None:
         if row is not None:
             await db.add_kop(uid, int(row["price_kop"]), "refund", f"order#{oid}")
             await notify(uid, "refund", order=oid, amount=money(int(row["price_kop"])))
-            await _admin_note(f"↩️ Заказ #{oid} не куплен на LZT, деньги вернули: {exc}")
+            await _admin_note(f"{emoji.tag('↩️')} Заказ #{oid} не куплен на LZT, деньги вернули: {exc}")
         return
     await db.finish_order(oid, got["phone"], got["password"], got["raw"], int(round(got["cost"] * 100)))
     await notify(uid, "done", order=oid, phone=got["phone"])
-    await _admin_note(f"🛒 Продажа #{oid}: {flag(order['country'])} {name_ru(order['country'])} · "
+    await _admin_note(f"{emoji.tag('🛒')} Продажа #{oid}: {emoji.tag(flag(order['country']))}{name_ru(order['country'])} · "
                       f"{money(int(order['price_kop']))} (закупка {money(int(round(got['cost'] * 100)))})\n"
                       f"{await who(uid)}")
 
@@ -354,12 +355,12 @@ async def report(uid: int, oid: int) -> dict:
         raise ShopError("slow_down")
     state = await lzt.check_owned(int(o["item_id"]))
     if state != "invalid":
-        await _admin_note(f"🛡 Жалоба на заказ #{oid}: проверка LZT = {state}\n{await who(uid)}")
+        await _admin_note(f"{emoji.tag('🛡')} Жалоба на заказ #{oid}: проверка LZT = {state}\n{await who(uid)}")
         return {"result": state}
     cur = await db.run("UPDATE orders SET status='refunded', error='invalid' WHERE id=? AND status='done'", (oid,))
     if cur.rowcount == 1 and int(o["price_kop"]) > 0:
         await db.add_kop(uid, int(o["price_kop"]), "refund", f"invalid#{oid}")
-    await _admin_note(f"🛡 Заказ #{oid} невалиден — LZT вернёт закупку, покупателю вернули "
+    await _admin_note(f"{emoji.tag('🛡')} Заказ #{oid} невалиден — LZT вернёт закупку, покупателю вернули "
                       f"{money(int(o['price_kop']))}\n{await who(uid)}")
     return {"result": "refunded"}
 
@@ -410,7 +411,7 @@ async def keep_reserve() -> None:
             if lot["cost"] > config.RESERVE_MAX_PRICE or lot["password"]:
                 continue
             if bal is not None and bal < lot["cost"]:
-                await _admin_note("💸 На LZT не хватает денег на резерв — пополните баланс маркета.", key="lzt_low")
+                await _admin_note(f"{emoji.tag('💳')} На LZT не хватает денег на резерв — пополните баланс маркета.", key="lzt_low")
                 return
             if await db.lzt_item_taken(lot["id"]):
                 continue
@@ -452,17 +453,36 @@ def _mask(name: str) -> str:
     return name[:1] + "•" * max(2, min(5, len(name) - 1)) if name else "—"
 
 
+_subs: dict[int, tuple[float, bool]] = {}
+
+
+def forget_sub(uid: int) -> None:
+    _subs.pop(uid, None)
+
+
 async def is_subscribed(uid: int) -> bool:
+    """Подписан ли на CHANNEL. Ответ кэшируется: подписан — на 5 минут, нет — на 15 секунд."""
     if not config.CHANNEL:
         return True
     if bot is None:
         return False
+    hit = _subs.get(uid)
+    if hit and time.time() - hit[0] < (300 if hit[1] else 15):
+        return hit[1]
     try:
         m = await bot.get_chat_member(config.CHANNEL, uid)
-    except Exception as exc:  # noqa: BLE001 — бот не админ канала или нет такого
+    except Exception as exc:  # noqa: BLE001 — бот не админ канала, канал переименован
+        # Проверить нельзя — не блокируем людей, а сообщаем админу (раз в час).
         log.warning("проверка подписки %s: %s", uid, exc)
-        return False
-    return m.status in ("member", "administrator", "creator", "restricted")
+        await _admin_note(f"{emoji.tag('🛡')} Не могу проверить подписку на {html.escape(config.CHANNEL)}: "
+                          f"{html.escape(str(exc))[:200]}\nСделайте бота админом канала. Пока пропускаю всех.",
+                          key="sub_check")
+        return True
+    ok = m.status in ("member", "administrator", "creator") or (m.status == "restricted" and getattr(m, "is_member", False))
+    _subs[uid] = (time.time(), ok)
+    if len(_subs) > 200_000:
+        _subs.clear()
+    return ok
 
 
 async def giveaway_join(uid: int) -> dict:
@@ -512,7 +532,7 @@ async def draw(force: bool = False) -> dict:
     st = await db.stats(int(time.time()) - 86400)
     if st["margin"] < config.GIVEAWAY_MAX_PRICE * 100 and not force:
         await db.run("UPDATE giveaways SET status='skipped', note='маржа за сутки меньше приза' WHERE day=?", (day,))
-        await _admin_note(f"🎁 Конкурс {day} пропущен: маржа за сутки {money(st['margin'])} меньше приза.")
+        await _admin_note(f"{emoji.tag('🎁')} Конкурс {day} пропущен: маржа за сутки {money(st['margin'])} меньше приза.")
         return {"status": "skipped", "note": "маржа меньше приза"}
     random.shuffle(entries)
     winner = None
@@ -525,14 +545,14 @@ async def draw(force: bool = False) -> dict:
         return {"status": "skipped", "note": "никто не подписан"}
     prize = await _prize()
     if prize is None:
-        await _admin_note(f"🎁 Конкурс {day}: не нашёл приз до {config.GIVEAWAY_MAX_PRICE:.0f} ₽ — розыгрыш отложен.")
+        await _admin_note(f"{emoji.tag('🎁')} Конкурс {day}: не нашёл приз до {config.GIVEAWAY_MAX_PRICE:.0f} ₽ — розыгрыш отложен.")
         return {"status": "open", "note": "нет приза"}
     src, item_id, cost, phone, pwd, info, c3 = prize
     oid = await db.create_order(winner, "giveaway", item_id, c3, cost, 0)
     await db.finish_order(oid, phone, pwd, info)
     await db.run("UPDATE giveaways SET status='done', winner_id=?, order_id=? WHERE day=?", (winner, oid, day))
     await notify(winner, "won", order=oid)
-    await _admin_note(f"🎁 Конкурс {day}: победитель {await who(winner)}, приз {flag(c3)} за {money(cost)}")
+    await _admin_note(f"{emoji.tag('🎁')} Конкурс {day}: победитель {await who(winner)}, приз {emoji.tag(flag(c3))}{name_ru(c3)} за {money(cost)}")
     return {"status": "done", "winner": winner, "order": oid, "entries": len(entries)}
 
 
@@ -601,7 +621,7 @@ async def _ref_claim(uid: int) -> dict:
     src, item_id, cost, phone, pwd, info, c3 = prize
     oid = await db.create_order(uid, "ref", item_id, c3, cost, 0)
     await db.finish_order(oid, phone, pwd, info)
-    await _admin_note(f"👥 Реферальный приз #{oid}: {flag(c3)} за {money(cost)}\n{await who(uid)}")
+    await _admin_note(f"{emoji.tag('👥')} Реферальный приз #{oid}: {emoji.tag(flag(c3))}{name_ru(c3)} за {money(cost)}\n{await who(uid)}")
     return await order_view(await db.get_order(oid))
 
 

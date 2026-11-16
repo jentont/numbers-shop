@@ -73,7 +73,9 @@ async def run_bot():
     dp = Dispatcher()
     import adminpanel
     import textmode
-    dp.include_router(adminpanel.router)  # первым: /admin и ap:*
+    import gate
+    gate.setup(dp)                         # обязательная подписка на канал
+    dp.include_router(adminpanel.router)  # /admin и ap:*
     dp.include_router(botmod.router)
     dp.include_router(textmode.router)  # после команд: ловит свободный текст
     log.info("бот @%s запущен", me.username)

@@ -1,16 +1,20 @@
-"""Свой набор премиум-эмодзи Solutions Numbers.
+"""Премиум-эмодзи: везде только они, обычных эмодзи в боте нет.
 
-Картинки — assets/emoji/*.png (100×100): чёрный глиф на белой плитке,
-белый стиль бренда. Рисует их tools/make_emoji.py из тех же иконок,
-что в витрине. needs_repainting выключен: плитка белая в любой теме.
+Откуда берутся (по приоритету):
+1. Ручные замены админа: /emoji_set 📱 <премиум-эмодзи> — хранятся в settings.emoji_map.
+2. Пак владельца t.me/addemoji/tgiosicons (EMOJI_PACK): символ эмодзи → custom_emoji_id.
+3. Свой белый набор numbers_icons_by_<бот> (assets/emoji, создаётся командой /emoji).
 
-Создать набор может только бот (createNewStickerSet), имя кончается на
-_by_<username бота>, владелец — админ, который уже писал боту.
-ID эмодзи бот читает из набора при старте и кладёт в ID: символ → id.
+Если для символа нет премиум-эмодзи ни в одном источнике, на его месте
+ничего не выводится — ни в тексте, ни на кнопке. Обычный эмодзи
+вместо премиума не подставляется никогда.
 """
 from __future__ import annotations
 
+import html
+import json
 import logging
+import os
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -21,8 +25,9 @@ import config
 log = logging.getLogger("numbers.emoji")
 DIR = config.BASE_DIR / "assets" / "emoji"
 TITLE = "Solutions Numbers"
+PACK = os.getenv("EMOJI_PACK", "tgiosicons").strip()
 
-#: файл → эмодзи, которыми его вставлять (первый — основной).
+#: файл своего набора → эмодзи, которыми его вставлять (первый — основной).
 MAP = {
     "phone": ["📱"], "sim": ["📶"], "cart": ["🛒"], "globe": ["🌐", "🌍"], "bolt": ["⚡"],
     "gift": ["🎁"], "card": ["💳"], "wallet": ["👛"], "star": ["⭐"], "flame": ["🔥"],
@@ -34,7 +39,25 @@ MAP = {
     "megaphone": ["📢"], "refund": ["↩️"], "wave": ["👋"], "s": ["🅢"],
 }
 
+#: Все символы, которые бот использует, — для /emoji_list.
+USED = sorted({c for v in MAP.values() for c in v} | {"⚠️", "💸", "✏️", "📤", "⏳", "❌", "🔍", "🏷️"})
+
 ID: dict[str, str] = {}
+SOURCES: dict[str, str] = {}      # символ → откуда взят (override / pack / own)
+
+
+def _norm(ch: str) -> str:
+    return ch.replace("️", "")
+
+
+def get(ch: str) -> str | None:
+    return ID.get(ch) or ID.get(_norm(ch))
+
+
+def tag(ch: str) -> str:
+    """HTML премиум-эмодзи или пустая строка, если его нет."""
+    cid = get(ch)
+    return f'<tg-emoji emoji-id="{cid}">{html.escape(ch)}</tg-emoji>' if cid else ""
 
 
 def pack_name() -> str:
@@ -45,19 +68,63 @@ def pack_url() -> str:
     return f"https://t.me/addemoji/{pack_name()}"
 
 
-async def load(bot: Bot) -> int:
-    """Читает набор и заполняет ID. 0 — набора ещё нет."""
+async def _read(bot: Bot, name: str, source: str, into: dict[str, str]) -> int:
     try:
-        pack = await bot.get_sticker_set(pack_name())
-    except TelegramAPIError:
+        pack = await bot.get_sticker_set(name)
+    except TelegramAPIError as exc:
+        log.info("эмодзи-пак %s недоступен: %s", name, exc)
         return 0
-    ID.clear()
+    n = 0
     for st in pack.stickers:
         if st.custom_emoji_id and st.emoji:
-            ID.setdefault(st.emoji, st.custom_emoji_id)
-            ID.setdefault(st.emoji.replace("️", ""), st.custom_emoji_id)
-    log.info("эмодзи-набор %s: %s шт", pack_name(), len(pack.stickers))
+            for key in (st.emoji, _norm(st.emoji)):
+                if key not in into:
+                    into[key] = st.custom_emoji_id
+                    SOURCES[key] = source
+                    n += 1
+    log.info("эмодзи-пак %s: %s стикеров", name, len(pack.stickers))
     return len(pack.stickers)
+
+
+async def load(bot: Bot) -> int:
+    """Собирает ID: ручные замены → пак tgiosicons → свой набор."""
+    import db
+    found: dict[str, str] = {}
+    SOURCES.clear()
+    try:
+        manual = json.loads(await db.get_setting("emoji_map", "{}") or "{}")
+    except ValueError:
+        manual = {}
+    for ch, cid in manual.items():
+        found[ch] = str(cid)
+        found[_norm(ch)] = str(cid)
+        SOURCES[ch] = SOURCES[_norm(ch)] = "override"
+    total = 0
+    if PACK:
+        total += await _read(bot, PACK, "pack", found)
+    if config.BOT_USERNAME:
+        total += await _read(bot, pack_name(), "own", found)
+    ID.clear()
+    ID.update(found)
+    return total
+
+
+async def set_manual(ch: str, cid: str) -> None:
+    import db
+    try:
+        manual = json.loads(await db.get_setting("emoji_map", "{}") or "{}")
+    except ValueError:
+        manual = {}
+    if cid:
+        manual[ch] = cid
+    else:
+        manual.pop(ch, None)
+    await db.set_setting("emoji_map", json.dumps(manual, ensure_ascii=False))
+    if cid:
+        ID[ch] = ID[_norm(ch)] = cid
+        SOURCES[ch] = SOURCES[_norm(ch)] = "override"
+    else:
+        ID.pop(ch, None)
 
 
 async def create(bot: Bot, owner_id: int, recreate: bool = False) -> tuple[bool, str]:

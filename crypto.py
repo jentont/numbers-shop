@@ -297,7 +297,8 @@ async def credit(inv_id: int) -> bool:
     import shop
     log.info("счёт #%s оплачен: +%s для %s", inv_id, kop, uid)
     await shop.notify(uid, "topup", amount=shop.money(kop))
-    await shop._admin_note(f"💳 Пополнение +{shop.money(kop)} · {TITLES.get(row['provider'])}\n"  # noqa: SLF001
+    import emoji
+    await shop._admin_note(f"{emoji.tag('💳')} Пополнение +{shop.money(kop)} · {TITLES.get(row['provider'])}\n"  # noqa: SLF001
                            f"{await shop.who(uid)}")
     return True
 

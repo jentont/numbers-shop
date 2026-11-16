@@ -68,7 +68,11 @@ def money_in(v) -> float:
     return f if math.isfinite(f) and 0 < f < 1_000_000 else 0.0
 
 
-async def _user(req: web.Request) -> dict:
+async def _user_nogate(req: web.Request) -> dict:
+    return await _user(req, gate_check=False)
+
+
+async def _user(req: web.Request, gate_check: bool = True) -> dict:
     tg = check_init_data(req.headers.get("X-Init-Data", ""))
     # Вход без подписи Telegram — только для локальной проверки. Если задан
     # боевой https-адрес, DEV_AUTH игнорируется, даже если его забыли выключить.
@@ -85,6 +89,11 @@ async def _user(req: web.Request) -> dict:
         raise web.HTTPTooManyRequests(text='{"error":"slow_down"}', content_type="application/json")
     hits.append(now)
     _hits[uid] = hits
+    import gate
+    if (gate_check and gate.active() and uid not in config.ADMIN_IDS and req.path not in ("/api/me", "/api/lang")
+            and not await shop.is_subscribed(uid)):
+        raise web.HTTPForbidden(text=json.dumps({"error": "need_sub", "channel": config.CHANNEL_URL}),
+                                content_type="application/json")
     if len(_hits) > 100_000:
         _hits.clear()
     u = await db.get_user(int(tg["id"]))
@@ -122,7 +131,21 @@ async def me(req):
         "channel": config.CHANNEL_URL, "support": config.SUPPORT.lstrip("@"), "markup": config.MARKUP,
         "bot": config.BOT_USERNAME, "demo": config.LZT_DEMO, "terms_ok": bool(u["terms_at"]),
         "banned": bool(u["banned"]), "max_per_day": config.MAX_PER_DAY,
+        "need_sub": await _need_sub(u["id"]), "channel_name": config.CHANNEL,
     })
+
+
+async def _need_sub(uid: int) -> bool:
+    import gate
+    if not gate.active() or uid in config.ADMIN_IDS:
+        return False
+    return not await shop.is_subscribed(uid)
+
+
+async def recheck_sub(req):
+    u = await _user_nogate(req)
+    shop.forget_sub(u["id"])
+    return ok({"need_sub": await _need_sub(u["id"])})
 
 
 async def accept(req):
@@ -317,6 +340,7 @@ def app() -> web.Application:
     r.add_post("/api/lang", set_lang)
     r.add_post("/api/tour", tour_done)
     r.add_post("/api/accept", accept)
+    r.add_post("/api/sub", recheck_sub)
     r.add_get("/{kind:terms|privacy}", legal)
     r.add_get("/api/home", home)
     r.add_get("/api/lots", lots)

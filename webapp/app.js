@@ -92,6 +92,7 @@ async function api(path, body) {
 }
 function errText(e) {
   const code = (e && e.message) || "err";
+  if (code === "need_sub") { subGate(); return t("sub_fail"); }
   if (code.startsWith("min:")) return t("min_amount", { p: money(+code.slice(4) * 100) });
   if (code === "no_money") return t("no_money", { p: money(Math.max(0, e.data.need - S.me.balance)) });
   if (code === "price_changed") return t("price_changed", { p: money(e.data.price) });
@@ -395,7 +396,7 @@ function lotSheet(id) {
       ${cell(t("session_l"), l.session_days ? t("session", { n: l.session_days }) : "—")}
       ${cell(t("online"), seen)}
       ${cell(t("origin"), t({ autoreg: "origin_autoreg", personal: "origin_personal", self_registration: "origin_self", resale: "origin_resale" }[l.origin] || "origin_any"))}
-      ${cell(t("twofa"), l.password ? "✓" : "—")}
+      ${cell(t("twofa"), l.password ? ic("check") : "—")}
       ${cell(t("channels"), l.channels || 0)}
       ${cell(t("contacts"), l.contacts || 0)}
       ${l.stars ? cell(t("stars"), l.stars) : ""}${l.gifts ? cell(t("gifts"), l.gifts) : ""}
@@ -712,6 +713,32 @@ function needTerms(then) {
   };
 }
 
+// ── обязательная подписка на канал ──────────────────────────────────
+function subGate(after) {
+  let el = $("#subgate");
+  if (!el) {
+    el = document.createElement("div"); el.id = "subgate"; el.className = "subgate";
+    document.body.append(el);
+  }
+  el.hidden = false;
+  el.innerHTML = `<div class="subgate-in">
+      <div class="accept-ic">${ic("megaphone")}</div>
+      <h2>${t("sub_title")}</h2>
+      <p>${t("sub_text", { ch: esc(S.me.channel_name || "") })}</p>
+      <button class="btn btn-ink btn-wide" id="sub-go" type="button">${ic("external")}${t("sub_btn")}</button>
+      <button class="btn btn-soft btn-wide" id="sub-check" type="button" style="margin-top:8px">${ic("check")}${t("sub_check")}</button>
+    </div>`;
+  $("#sub-go").onclick = () => openLink(S.me.channel);
+  $("#sub-check").onclick = async () => {
+    try {
+      const r = await api("/api/sub", {});
+      if (r.need_sub) { notifyH("error"); return toast(t("sub_fail")); }
+    } catch { return toast(t("err")); }
+    notifyH("success"); el.hidden = true; S.me.need_sub = false;
+    if (after) after(); else if (!S.me.tour_done) tour(0); else { $("#app").hidden = false; openTab(S.tab); }
+  };
+}
+
 // ── вкладки ─────────────────────────────────────────────────────────
 function openTab(tab) {
   S.tab = tab; show(tab); haptic();
@@ -831,6 +858,7 @@ async function boot() {
   const startTab = qs.get("tab");
   S.tab = ["orders", "gw", "wallet"].includes(startTab) ? startTab : "market";
   $("#boot").classList.add("is-out"); setTimeout(() => $("#boot").remove(), 400);
+  if (S.me.need_sub) return subGate();
   if (!S.me.tour_done || qs.get("tour") === "1") tour(0);
   else { $("#app").hidden = false; openTab(S.tab); }
   setInterval(() => { if (S.tab === "market" && S.screen === "market" && $("#sheet-wrap").hidden) loadHome(); }, 45000);

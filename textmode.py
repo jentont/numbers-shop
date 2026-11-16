@@ -19,6 +19,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton as IB, InlineKeybo
 
 import bot as b
 import config
+import emoji
 import crypto
 import db
 import i18n
@@ -43,11 +44,12 @@ WAIT: dict[int, tuple[str, float]] = {}
 
 TT: dict[str, dict[str, str]] = {
     "ru": {
+        "no_code": "Код ещё не пришёл, попробуйте через 10 секунд", "share": "Поделиться",
         "catalog": "Каталог", "profile": "Профиль", "orders": "Мои покупки", "back": "Назад", "menu": "Меню",
-        "cat_title": "Выберите страну", "cat_sub": "Цена «от» — самый дешёвый аккаунт страны. ⚡ — есть мгновенная выдача.",
+        "cat_title": "Выберите страну", "cat_sub": "Цена «от» — самый дешёвый аккаунт страны. Значок молнии — есть мгновенная выдача.",
         "reg_all": "Весь мир", "reg_cis": "СНГ", "reg_eu": "Европа", "reg_asia": "Азия", "reg_am": "Америка", "reg_af": "Африка",
         "lots": "аккаунтов", "from": "от", "sort_cheap": "Дешевле", "sort_new": "Новые", "sort_old": "Старше сессия",
-        "instant": "Мгновенно", "instant_btn": "⚡ Мгновенно за {p}", "no_lots": "Сейчас лотов нет — загляните позже.",
+        "instant": "Мгновенно", "instant_btn": "Мгновенно за {p}", "no_lots": "Сейчас лотов нет — загляните позже.",
         "lot_title": "Telegram-аккаунт", "session": "Сессия", "days": "дн.", "origin": "Происхождение", "premium": "Premium",
         "twofa": "Пароль 2FA", "yes": "есть", "no": "нет", "channels": "Каналы", "contacts": "Контакты", "online": "В сети",
         "checked": "Маркет проверяет аккаунт при покупке. Не работает — вернём деньги.",
@@ -56,7 +58,7 @@ TT: dict[str, dict[str, str]] = {
         "balance": "Баланс", "topup": "Пополнить", "send": "Отправить другу", "promo": "Промокод", "friends": "Друзья",
         "history": "История", "need": "Не хватает {p}. Пополните баланс.",
         "pick_amount": "Сколько пополнить?", "own_amount": "Своя сумма", "pick_method": "Пополнение на {p}. Чем оплатить?",
-        "stars_note": "звёзды ×2", "pay": "Оплатить", "check_pay": "Проверить оплату", "paid": "Оплата получена ✅",
+        "stars_note": "звёзды ×2", "pay": "Оплатить", "check_pay": "Проверить оплату", "paid": "Оплата получена",
         "not_paid": "Оплата ещё не пришла", "ton_hint": "Переведите {a} TON на адрес ниже с комментарием <code>{c}</code>:",
         "ask_amount": "Напишите сумму в рублях, например 300.", "ask_promo": "Пришлите промокод сообщением.",
         "ask_send": "Пришлите ID или @username друга и сумму через пробел, например: <code>@friend 50</code>",
@@ -72,11 +74,12 @@ TT: dict[str, dict[str, str]] = {
         "err": "Что-то пошло не так, попробуйте ещё раз.",
     },
     "en": {
+        "no_code": "No code yet, try again in 10 seconds", "share": "Share",
         "catalog": "Catalog", "profile": "Profile", "orders": "My purchases", "back": "Back", "menu": "Menu",
-        "cat_title": "Choose a country", "cat_sub": "“From” is the cheapest account in the country. ⚡ means instant delivery.",
+        "cat_title": "Choose a country", "cat_sub": "“From” is the cheapest account in the country. The lightning icon means instant delivery.",
         "reg_all": "World", "reg_cis": "CIS", "reg_eu": "Europe", "reg_asia": "Asia", "reg_am": "Americas", "reg_af": "Africa",
         "lots": "accounts", "from": "from", "sort_cheap": "Cheapest", "sort_new": "Newest", "sort_old": "Oldest session",
-        "instant": "Instant", "instant_btn": "⚡ Instant for {p}", "no_lots": "No listings right now — check back later.",
+        "instant": "Instant", "instant_btn": "Instant for {p}", "no_lots": "No listings right now — check back later.",
         "lot_title": "Telegram account", "session": "Session", "days": "d", "origin": "Origin", "premium": "Premium",
         "twofa": "2FA password", "yes": "yes", "no": "no", "channels": "Channels", "contacts": "Contacts", "online": "Online",
         "checked": "The market checks the account on purchase. If it doesn't work, you get your money back.",
@@ -85,7 +88,7 @@ TT: dict[str, dict[str, str]] = {
         "balance": "Balance", "topup": "Top up", "send": "Send to a friend", "promo": "Promo code", "friends": "Friends",
         "history": "History", "need": "You need {p} more. Top up your balance.",
         "pick_amount": "How much to top up?", "own_amount": "Custom amount", "pick_method": "Top-up of {p}. How to pay?",
-        "stars_note": "Stars ×2", "pay": "Pay", "check_pay": "Check payment", "paid": "Payment received ✅",
+        "stars_note": "Stars ×2", "pay": "Pay", "check_pay": "Check payment", "paid": "Payment received",
         "not_paid": "Payment hasn't arrived yet", "ton_hint": "Send {a} TON to the address below with the comment <code>{c}</code>:",
         "ask_amount": "Send the amount in rubles, e.g. 300.", "ask_promo": "Send the promo code as a message.",
         "ask_send": "Send your friend's ID or @username and the amount, e.g.: <code>@friend 50</code>",
@@ -101,11 +104,12 @@ TT: dict[str, dict[str, str]] = {
         "err": "Something went wrong, please try again.",
     },
     "es": {
+        "no_code": "Aún no hay código, inténtalo en 10 segundos", "share": "Compartir",
         "catalog": "Catálogo", "profile": "Perfil", "orders": "Mis compras", "back": "Atrás", "menu": "Menú",
-        "cat_title": "Elige un país", "cat_sub": "«Desde» es la cuenta más barata del país. ⚡ = entrega instantánea.",
+        "cat_title": "Elige un país", "cat_sub": "«Desde» es la cuenta más barata del país. El rayo = entrega instantánea.",
         "reg_all": "Mundo", "reg_cis": "CEI", "reg_eu": "Europa", "reg_asia": "Asia", "reg_am": "América", "reg_af": "África",
         "lots": "cuentas", "from": "desde", "sort_cheap": "Más baratas", "sort_new": "Más nuevas", "sort_old": "Sesión antigua",
-        "instant": "Al instante", "instant_btn": "⚡ Al instante por {p}", "no_lots": "Ahora no hay anuncios, vuelve más tarde.",
+        "instant": "Al instante", "instant_btn": "Al instante por {p}", "no_lots": "Ahora no hay anuncios, vuelve más tarde.",
         "lot_title": "Cuenta de Telegram", "session": "Sesión", "days": "d", "origin": "Origen", "premium": "Premium",
         "twofa": "Contraseña 2FA", "yes": "sí", "no": "no", "channels": "Canales", "contacts": "Contactos", "online": "En línea",
         "checked": "El mercado verifica la cuenta al comprar. Si no funciona, te devolvemos el dinero.",
@@ -114,7 +118,7 @@ TT: dict[str, dict[str, str]] = {
         "balance": "Saldo", "topup": "Recargar", "send": "Enviar a un amigo", "promo": "Código promo", "friends": "Amigos",
         "history": "Historial", "need": "Te faltan {p}. Recarga tu saldo.",
         "pick_amount": "¿Cuánto recargar?", "own_amount": "Otra cantidad", "pick_method": "Recarga de {p}. ¿Cómo pagar?",
-        "stars_note": "Stars ×2", "pay": "Pagar", "check_pay": "Comprobar pago", "paid": "Pago recibido ✅",
+        "stars_note": "Stars ×2", "pay": "Pagar", "check_pay": "Comprobar pago", "paid": "Pago recibido",
         "not_paid": "El pago aún no ha llegado", "ton_hint": "Envía {a} TON a la dirección de abajo con el comentario <code>{c}</code>:",
         "ask_amount": "Envía la cantidad en rublos, p. ej. 300.", "ask_promo": "Envía el código promo como mensaje.",
         "ask_send": "Envía el ID o @usuario de tu amigo y la cantidad, p. ej.: <code>@friend 50</code>",
@@ -130,11 +134,12 @@ TT: dict[str, dict[str, str]] = {
         "err": "Algo salió mal, inténtalo de nuevo.",
     },
     "ar": {
+        "no_code": "لم يصل الرمز بعد، حاول بعد 10 ثوانٍ", "share": "مشاركة",
         "catalog": "الكتالوج", "profile": "الملف", "orders": "مشترياتي", "back": "رجوع", "menu": "القائمة",
-        "cat_title": "اختر دولة", "cat_sub": "«من» هو أرخص حساب في الدولة. ⚡ = تسليم فوري.",
+        "cat_title": "اختر دولة", "cat_sub": "«من» هو أرخص حساب في الدولة. البرق = تسليم فوري.",
         "reg_all": "العالم", "reg_cis": "رابطة الدول", "reg_eu": "أوروبا", "reg_asia": "آسيا", "reg_am": "الأمريكتان", "reg_af": "أفريقيا",
         "lots": "حساب", "from": "من", "sort_cheap": "الأرخص", "sort_new": "الأحدث", "sort_old": "أقدم جلسة",
-        "instant": "فوري", "instant_btn": "⚡ فوري بـ {p}", "no_lots": "لا توجد عروض الآن — عد لاحقًا.",
+        "instant": "فوري", "instant_btn": "فوري بـ {p}", "no_lots": "لا توجد عروض الآن — عد لاحقًا.",
         "lot_title": "حساب تيليجرام", "session": "الجلسة", "days": "ي", "origin": "المصدر", "premium": "بريميوم",
         "twofa": "كلمة مرور 2FA", "yes": "نعم", "no": "لا", "channels": "القنوات", "contacts": "جهات الاتصال", "online": "متصل",
         "checked": "يفحص المتجر الحساب عند الشراء. إن لم يعمل نعيد لك المال.",
@@ -143,7 +148,7 @@ TT: dict[str, dict[str, str]] = {
         "balance": "الرصيد", "topup": "اشحن", "send": "أرسل لصديق", "promo": "رمز ترويجي", "friends": "الأصدقاء",
         "history": "السجل", "need": "ينقصك {p}. اشحن رصيدك.",
         "pick_amount": "كم تريد أن تشحن؟", "own_amount": "مبلغ آخر", "pick_method": "شحن {p}. كيف تدفع؟",
-        "stars_note": "النجوم ×2", "pay": "ادفع", "check_pay": "تحقق من الدفع", "paid": "تم استلام الدفع ✅",
+        "stars_note": "النجوم ×2", "pay": "ادفع", "check_pay": "تحقق من الدفع", "paid": "تم استلام الدفع",
         "not_paid": "لم يصل الدفع بعد", "ton_hint": "أرسل {a} TON إلى العنوان أدناه مع التعليق <code>{c}</code>:",
         "ask_amount": "أرسل المبلغ بالروبل، مثل 300.", "ask_promo": "أرسل الرمز الترويجي في رسالة.",
         "ask_send": "أرسل معرّف صديقك أو @اسمه والمبلغ، مثل: <code>@friend 50</code>",
@@ -159,11 +164,12 @@ TT: dict[str, dict[str, str]] = {
         "err": "حدث خطأ، حاول مرة أخرى.",
     },
     "hi": {
+        "no_code": "अभी कोड नहीं आया, 10 सेकंड बाद कोशिश करें", "share": "शेयर करें",
         "catalog": "कैटलॉग", "profile": "प्रोफ़ाइल", "orders": "मेरी खरीदारी", "back": "वापस", "menu": "मेनू",
-        "cat_title": "देश चुनें", "cat_sub": "«से» — देश का सबसे सस्ता अकाउंट। ⚡ — तुरंत डिलीवरी।",
+        "cat_title": "देश चुनें", "cat_sub": "«से» — देश का सबसे सस्ता अकाउंट। बिजली का निशान — तुरंत डिलीवरी।",
         "reg_all": "दुनिया", "reg_cis": "CIS", "reg_eu": "यूरोप", "reg_asia": "एशिया", "reg_am": "अमेरिका", "reg_af": "अफ़्रीका",
         "lots": "अकाउंट", "from": "से", "sort_cheap": "सस्ते", "sort_new": "नए", "sort_old": "पुराना सेशन",
-        "instant": "तुरंत", "instant_btn": "⚡ तुरंत {p} में", "no_lots": "अभी कोई लिस्टिंग नहीं — बाद में देखें।",
+        "instant": "तुरंत", "instant_btn": "तुरंत {p} में", "no_lots": "अभी कोई लिस्टिंग नहीं — बाद में देखें।",
         "lot_title": "Telegram अकाउंट", "session": "सेशन", "days": "दिन", "origin": "स्रोत", "premium": "Premium",
         "twofa": "2FA पासवर्ड", "yes": "हाँ", "no": "नहीं", "channels": "चैनल", "contacts": "संपर्क", "online": "ऑनलाइन",
         "checked": "मार्केट खरीद के समय अकाउंट जाँचता है। काम न करे तो पैसे वापस।",
@@ -172,7 +178,7 @@ TT: dict[str, dict[str, str]] = {
         "balance": "बैलेंस", "topup": "टॉप-अप", "send": "दोस्त को भेजें", "promo": "प्रोमो कोड", "friends": "दोस्त",
         "history": "इतिहास", "need": "{p} कम है। बैलेंस टॉप-अप करें।",
         "pick_amount": "कितना टॉप-अप करें?", "own_amount": "अपनी राशि", "pick_method": "{p} का टॉप-अप। कैसे भुगतान करें?",
-        "stars_note": "Stars ×2", "pay": "भुगतान करें", "check_pay": "भुगतान जाँचें", "paid": "भुगतान मिला ✅",
+        "stars_note": "Stars ×2", "pay": "भुगतान करें", "check_pay": "भुगतान जाँचें", "paid": "भुगतान मिला",
         "not_paid": "भुगतान अभी नहीं आया", "ton_hint": "नीचे के पते पर {a} TON टिप्पणी <code>{c}</code> के साथ भेजें:",
         "ask_amount": "रूबल में राशि भेजें, जैसे 300।", "ask_promo": "प्रोमो कोड मैसेज में भेजें।",
         "ask_send": "दोस्त की ID या @username और राशि भेजें, जैसे: <code>@friend 50</code>",
@@ -188,11 +194,12 @@ TT: dict[str, dict[str, str]] = {
         "err": "कुछ गड़बड़ हुई, फिर से कोशिश करें।",
     },
     "zh": {
+        "no_code": "验证码还没到，请 10 秒后再试", "share": "分享",
         "catalog": "商品目录", "profile": "个人中心", "orders": "我的购买", "back": "返回", "menu": "菜单",
-        "cat_title": "选择国家", "cat_sub": "「起」为该国最便宜账号的价格。⚡ = 即时发货。",
+        "cat_title": "选择国家", "cat_sub": "「起」为该国最便宜账号的价格。闪电标志 = 即时发货。",
         "reg_all": "全球", "reg_cis": "独联体", "reg_eu": "欧洲", "reg_asia": "亚洲", "reg_am": "美洲", "reg_af": "非洲",
         "lots": "个账号", "from": "起", "sort_cheap": "最便宜", "sort_new": "最新", "sort_old": "会话最久",
-        "instant": "即时", "instant_btn": "⚡ 即时 {p}", "no_lots": "暂无商品，请稍后再来。",
+        "instant": "即时", "instant_btn": "即时 {p}", "no_lots": "暂无商品，请稍后再来。",
         "lot_title": "Telegram 账号", "session": "会话", "days": "天", "origin": "来源", "premium": "会员",
         "twofa": "两步验证密码", "yes": "有", "no": "无", "channels": "频道", "contacts": "联系人", "online": "在线",
         "checked": "购买时市场会检测账号。不能用就退款。",
@@ -201,7 +208,7 @@ TT: dict[str, dict[str, str]] = {
         "balance": "余额", "topup": "充值", "send": "转给好友", "promo": "优惠码", "friends": "好友",
         "history": "记录", "need": "还差 {p}，请先充值。",
         "pick_amount": "充值多少？", "own_amount": "自定义金额", "pick_method": "充值 {p}，选择支付方式：",
-        "stars_note": "Stars ×2", "pay": "去支付", "check_pay": "检查支付", "paid": "已收到付款 ✅",
+        "stars_note": "Stars ×2", "pay": "去支付", "check_pay": "检查支付", "paid": "已收到付款",
         "not_paid": "尚未收到付款", "ton_hint": "向下方地址转账 {a} TON，备注 <code>{c}</code>：",
         "ask_amount": "请发送卢布金额，例如 300。", "ask_promo": "请发送优惠码。",
         "ask_send": "发送好友的 ID 或 @用户名 和金额，例如：<code>@friend 50</code>",
@@ -294,6 +301,20 @@ _EN = {
 }
 
 
+def flag_e(c3: str) -> str:
+    """Флаг страны — только премиум-эмодзи (если он есть в паке), иначе ничего."""
+    return emoji.tag(flag(c3))
+
+
+def country_btn(x: dict, lang: str) -> IB:
+    text = f"{cname(x['country'], lang)} · {tt('from', lang)} {shop.money(x['from'])}"
+    data = f"tm:c:{x['country']}:cheap:0"
+    icon = emoji.get(flag(x["country"])) or (emoji.get("⚡") if x["instant"] else None)
+    # Есть мгновенная выдача — кнопка синяя; иконка — премиум-флаг или молния.
+    return IB(text=text, callback_data=data, icon_custom_emoji_id=icon if b._icons_on() else None,
+              style="primary" if x["instant"] else None)
+
+
 def mask(c3: str, seed: int) -> str:
     n = abs(seed)
     digits = []
@@ -337,9 +358,7 @@ async def catalog(c: CallbackQuery) -> None:
             for r in REGIONS]
     rows = [regs[:3], regs[3:]]
     for i in range(0, len(chunk), 2):
-        rows.append([IB(text=f"{flag(x['country'])} {cname(x['country'], lang)} · {tt('from', lang)} "
-                             f"{shop.money(x['from'])}{' ⚡' if x['instant'] else ''}",
-                        callback_data=f"tm:c:{x['country']}:cheap:0") for x in chunk[i:i + 2]])
+        rows.append([country_btn(x, lang) for x in chunk[i:i + 2]])
     rows.append(pager_row(f"tm:cat:{region}", page, pages))
     rows.append([b._btn(tt("orders", lang), "🛒", callback_data="tm:o:0"),
                  b._btn(tt("profile", lang), "👤", callback_data="tm:p")])
@@ -380,7 +399,7 @@ async def country(c: CallbackQuery) -> None:
     for x in chunk:
         tags = []
         if x["premium"]:
-            tags.append("👑")
+            tags.append("Premium")
         if x["password"]:
             tags.append("2FA")
         if x["session_days"]:
@@ -389,7 +408,7 @@ async def country(c: CallbackQuery) -> None:
                         callback_data=f"tm:l:{x['id']}")])
     rows.append(pager_row(f"tm:c:{c3}:{sort}", page, pages))
     rows.append(nav(lang, "tm:cat:all:0"))
-    text = (f"{flag(c3)} <b>{html.escape(cname(c3, lang))}</b> +{dial(c3)}\n"
+    text = (f"{flag_e(c3)} <b>{html.escape(cname(c3, lang))}</b> +{dial(c3)}\n"
             f"{len(lots)} {tt('lots', lang)}" + ("" if lots else f"\n\n{tt('no_lots', lang)}"))
     await show(c, text, kb(rows))
     await c.answer()
@@ -407,7 +426,7 @@ async def lot(c: CallbackQuery) -> None:
     yn = lambda v: tt("yes", lang) if v else tt("no", lang)  # noqa: E731
     seen = int((time.time() - x["last_seen"]) / 86400) if x["last_seen"] else None
     seen_s = "—" if seen is None else f"{seen} {tt('days', lang)}"
-    text = (f"{flag(x['country'])} <b>{tt('lot_title', lang)}</b>\n<code>{mask(x['country'], x['id'])}</code>\n\n"
+    text = (f"{flag_e(x['country'])} <b>{tt('lot_title', lang)}</b>\n<code>{mask(x['country'], x['id'])}</code>\n\n"
             f"{tt('session', lang)}: {x['session_days'] or '—'} {tt('days', lang)}\n"
             f"{tt('online', lang)}: {seen_s}\n"
             f"{tt('origin', lang)}: {x['origin'] or '—'}\n"
@@ -472,7 +491,7 @@ async def ask_terms(c: CallbackQuery, lang: str, back: str) -> None:
 async def accept(c: CallbackQuery) -> None:
     await db.accept_terms(c.from_user.id)
     c_back = c.data[len("tm:acc:"):]
-    await c.answer("✅")
+    await c.answer()
     # Возвращаем туда, откуда пришли (карточка лота или страна).
     if c_back.startswith("tm:l:"):
         return await lot(c.model_copy(update={"data": c_back}))
@@ -553,7 +572,7 @@ async def orders(c: CallbackQuery) -> None:
     rows = []
     for o in items[page * PER_O:(page + 1) * PER_O]:
         st = tt(f"st_{o['status']}", lang)
-        rows.append([IB(text=f"{flag(o['country'])} {o['phone'] or mask(o['country'], o['id'])} · {st}",
+        rows.append([IB(text=f"{o['phone'] or mask(o['country'], o['id'])} · {st}",
                         callback_data=f"tm:od:{o['id']}")])
     rows.append(pager_row("tm:o", page, pages))
     rows.append(nav(lang, "tm:cat:all:0"))
@@ -566,7 +585,7 @@ async def order_card(c: CallbackQuery, lang: str, oid: int) -> None:
     if o is None or int(o["user_id"]) != c.from_user.id:
         return
     v = await shop.order_view(o)
-    text = (f"{flag(o['country'])} <b>#{oid}</b> · {tt('st_' + o['status'], lang)}\n\n"
+    text = (f"{flag_e(o['country'])} <b>#{oid}</b> · {tt('st_' + o['status'], lang)}\n\n"
             f"{tt('phone', lang)}: <code>{html.escape(o['phone'] or '—')}</code>")
     if o["password"]:
         text += f"\n{tt('password', lang)}: <code>{html.escape(o['password'])}</code>"
@@ -591,7 +610,7 @@ async def code(c: CallbackQuery) -> None:
     try:
         got = await shop.get_code(c.from_user.id, _int(c.data.split(":")[2]))
     except shop.ShopError as e:
-        msg = {"no_code": "⏳", "slow_down": "⏳"}.get(e.code, tt("err", lang))
+        msg = {"no_code": tt("no_code", lang), "slow_down": tt("no_code", lang)}.get(e.code, tt("err", lang))
         return await c.answer(msg, show_alert=e.code not in ("no_code", "slow_down"))
     await c.message.answer(f"{b._e('🔑')} {tt('code', lang, c=html.escape(got['code']))}")
     await c.answer()
@@ -690,9 +709,7 @@ async def pay(c: CallbackQuery) -> None:
         msg = str(e)
         return await c.answer(f"min {config.TOPUP_MIN:.0f} ₽" if msg.startswith("min:") else tt("err", lang), show_alert=True)
     if provider == "stars":
-        # Белая звезда: премиум-эмодзи из нашего набора, без него — текстовый ☆.
-        star = b._e("⭐") if b.emoji.ID.get("⭐") else "☆"
-        await c.message.answer(f"{star} {inv['amount']}",
+        await c.message.answer(f"{b._e('⭐')} {inv['amount']} Stars",
                                reply_markup=kb([[b._btn(f"{tt('pay', lang)} {inv['amount']}", "⭐", url=inv["pay_url"])]]))
         return await c.answer()
     import asyncio
@@ -744,7 +761,8 @@ async def friends(c: CallbackQuery) -> None:
     text = (f"{b._e('👥')} " + tt("ref_text", lang, goal=st["goal"], p=shop.money(int(st["prize_max"] * 100)),
                                   n=st["progress"], all=st["invited"], link=html.escape(st["link"]))
             + (f"\n\n<i>{tt('ref_rule', lang)}</i>" if st["need_channel"] else ""))
-    rows = [[IB(text="📤", url=f"https://t.me/share/url?url={st['link']}")] if st["link"].startswith("http") else [],
+    rows = [[b._btn(tt("share", lang), "📢", url=f"https://t.me/share/url?url={st['link']}")]
+            if st["link"].startswith("http") else [],
             [b._btn(tt("ref_claim", lang), "🎁", callback_data="tm:rc")] if st["claimable"] else [],
             nav(lang, "tm:p")]
     await show(c, text, kb(rows))

@@ -398,3 +398,9 @@ body.dark .star-dot { box-shadow: 0 0 0 1px rgba(255,255,255,.25); }
 /* логотипы способов оплаты: официальные аватарки @send, @xrocket, Tonkeeper */
 .pay-ic:has(.pay-logo) { padding: 0; overflow: hidden; background: none; }
 .pay-logo { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; }
+
+/* обязательная подписка */
+.subgate { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.subgate-in { width: 100%; max-width: 420px; text-align: center; }
+.subgate h2 { font: 900 24px/1.15 var(--display); margin: 6px 0 8px; }
+.subgate p { color: var(--text-2); margin-bottom: 20px; }
