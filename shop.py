@@ -374,9 +374,28 @@ async def _buy_lot(uid: int, item_id: int, expected: int) -> dict:
 
 
 #: Ошибки, при которых виноват сам аккаунт LZT/токен, а не конкретный лот.
-_AUTH_ERRORS = ("401", "invalid or expired access token", "access token", "scope", "токен")
+_AUTH_ERRORS = ("invalid or expired access token", "invalid_token", "insufficient_scope", "access token is")
+
+
+def _auth_error(exc: Exception) -> bool:
+    """Ошибка токена, а не лота. Смотрим код ответа после «→», а не всю строку:
+    в ней путь с ID лота, и ID вроде 2734015 раньше ложно ловился как «401»."""
+    text = str(exc)
+    status = text.split("→", 1)[1].strip()[:3] if "→" in text else ""
+    return status == "401" or any(w in text.lower() for w in _AUTH_ERRORS)
 #: Сколько разных лотов пробуем купить за один заказ.
 LOT_ATTEMPTS = 5
+
+
+async def auto_resume() -> bool:
+    """Покупки на паузе, а токен снова работает (/me отвечает) — включаем сами."""
+    if not LZT_STATE["buy_paused"] or config.LZT_DEMO:
+        return False
+    if await lzt.balance() is None:
+        return False
+    LZT_STATE.update(buy_paused=False, buy_fails=0)
+    await _admin_note(f"{emoji.tag('✅')} Токен LZT снова работает — покупки включены сами.", key="buy_on")
+    return True
 
 
 def _drop_lot(item_id: int) -> None:
@@ -418,12 +437,12 @@ async def _fulfil(oid: int, item_id: int, cost: float, seller: dict | None = Non
             log.warning("заказ #%s: LZT не продал %s: %s", oid, cand["id"], exc)
             errors.append(f"{cand['id']}: {exc}")
             _drop_lot(int(cand["id"]))
-            low = str(exc).lower()
-            if any(w in low for w in _AUTH_ERRORS):
+            if _auth_error(exc):
                 # Сбой токена/аккаунта LZT: дальше пробовать бессмысленно.
                 LZT_STATE["buy_fails"] += 1
                 LZT_STATE["buy_error"] = str(exc)[:300]
-                if LZT_STATE["buy_fails"] >= BUY_FAILS_PAUSE and not LZT_STATE["buy_paused"]:
+                if (LZT_STATE["buy_fails"] >= BUY_FAILS_PAUSE and not LZT_STATE["buy_paused"]
+                        and await lzt.balance() is None):        # /me тоже не пускает — токен правда мёртв
                     LZT_STATE["buy_paused"] = True
                     await _admin_note(
                         f"{emoji.tag('🛡')} <b>Покупки на паузе</b>: токен LZT не принимается "

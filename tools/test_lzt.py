@@ -129,6 +129,22 @@ async def main():
     async def bad_token(item_id, cost):
         raise lzt.LztError("POST /x/fast-buy → 401: Invalid or expired access token.")
 
+    # ID лота с «401» внутри и 403 от маркета — это проблема лота, не токена
+    async def id_401(item_id, cost):
+        raise lzt.LztError("POST /2734015/fast-buy → 403: У Вас нет прав для этого действия.")
+
+    lzt.buy = id_401
+    for i in range(4):
+        oid = await db.create_order(50, "live", 2734015, "RUS", 1000, 1200)
+        await shop._fulfil(oid, 2734015, 10)  # noqa: SLF001
+    check("ID лота с «401» не ставит покупки на паузу", not shop.LZT_STATE["buy_paused"])
+
+    real_bal = lzt.balance
+
+    async def dead_me():
+        return None
+
+    lzt.balance = dead_me
     lzt.buy = bad_token
     for i in range(3):
         oid = await db.create_order(50, "live", 900 + i, "RUS", 1000, 1200)
@@ -140,6 +156,14 @@ async def main():
     except shop.ShopError as e:
         paused = e.code == "buy_paused"
     check("на паузе новые покупки не начинаются (деньги не списываются)", paused)
+    lzt.balance = real_bal
+
+    async def alive_me():
+        return 500.0
+
+    lzt.balance = alive_me
+    check("токен ожил — пауза снимается сама", await shop.auto_resume() and not shop.LZT_STATE["buy_paused"])
+    lzt.balance = real_bal
     asyncio.sleep = real_sleep
 
     # продавцы: чёрный список, новички, «восстановители», автобан по жалобам

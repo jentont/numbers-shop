@@ -35,6 +35,7 @@ async def worker() -> None:
             if loop.time() - last_reserve > 300:
                 last_reserve = loop.time()
                 await shop.check_lzt_funds()
+                await shop.auto_resume()
                 await shop.keep_reserve()
                 if shop.bot is not None:
                     import botprofile
