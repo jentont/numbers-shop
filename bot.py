@@ -496,6 +496,13 @@ async def reserve_now(m: Message) -> None:
         await m.answer(f"Резерв: {len(await db.reserve_ready())} шт")
 
 
+@router.message(Command("buy_on"))
+async def buy_on(m: Message) -> None:
+    if _is_admin(m.from_user.id):
+        shop.LZT_STATE.update(buy_paused=False, buy_fails=0)
+        await m.answer("Покупки снова включены.")
+
+
 @router.message(Command("lzt"))
 async def lzt_diag(m: Message) -> None:
     """Почему нет лотов: токен, баланс, поиск, формат стран."""
@@ -510,6 +517,8 @@ async def lzt_diag(m: Message) -> None:
              f"Токен: {'нет' if not tok else html.escape(tok[:4] + '…' + tok[-4:]) + f' ({len(tok)} символов)'}"
              + (" — <b>есть пробелы/переносы!</b>" if tok != tok.strip() or " " in tok else "")]
     st = shop.LZT_STATE
+    if st.get("buy_paused"):
+        lines.append(f"<b>Покупки на паузе</b>: <code>{html.escape(st['buy_error'])}</code> — включить: /buy_on")
     if st["error"]:
         lines.append(f"Последняя ошибка: <code>{html.escape(st['error'])}</code>")
     if config.LZT_DEMO:

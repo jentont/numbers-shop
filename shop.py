@@ -37,7 +37,11 @@ SNAP: dict[str, tuple[float, list[dict]]] = {}
 ARRIVALS: list[dict] = []
 _seen: dict[str, set[int]] = {}
 #: Последний успех и последняя ошибка LZT — для витрины, /lzt и админки.
-LZT_STATE: dict = {"ok_at": 0.0, "error": "", "error_at": 0.0, "crawled": 0}
+LZT_STATE: dict = {"ok_at": 0.0, "error": "", "error_at": 0.0, "crawled": 0,
+                   "buy_fails": 0, "buy_paused": False, "buy_error": ""}
+#: После стольких отказов LZT подряд (разные лоты) покупки ставятся на паузу:
+#: иначе каждый покупатель получает только «не удалось, деньги вернулись».
+BUY_FAILS_PAUSE = 3
 _code_at: dict[int, float] = {}
 #: Покупки одного человека идут строго по очереди: иначе 50 параллельных
 #: запросов проскочат проверки (лимит, бан) одновременно.
@@ -210,6 +214,7 @@ async def home() -> dict:
         "instant": inst_cards,
         "demo": config.LZT_DEMO,
         "total": total_lots,
+        "buy_paused": LZT_STATE["buy_paused"] and not config.LZT_DEMO,
         # Каталог пуст из-за сбоя маркета, а не потому, что товара нет.
         "market_down": not countries and bool(LZT_STATE["error"]),
     }
@@ -287,6 +292,8 @@ async def guard(uid: int) -> None:
         raise ShopError("not_found")
     if u["banned"]:
         raise ShopError("banned")
+    if LZT_STATE["buy_paused"] and not config.LZT_DEMO:
+        raise ShopError("buy_paused")
     if not u["terms_at"]:
         raise ShopError("terms")
     if u["trusted"]:
@@ -362,12 +369,25 @@ async def _fulfil(oid: int, item_id: int, cost: float) -> None:
         got = await lzt.buy(item_id, cost)
     except Exception as exc:  # noqa: BLE001 — любая ошибка = возврат
         log.warning("заказ #%s: LZT не продал %s: %s", oid, item_id, exc)
+        low = str(exc).lower()
+        # «лот уже купили / цена изменилась» — обычное дело; 403 и права — сбой аккаунта LZT.
+        if "403" in low or "прав" in low or "permission" in low or "401" in low:
+            LZT_STATE["buy_fails"] += 1
+            LZT_STATE["buy_error"] = str(exc)[:300]
+            if LZT_STATE["buy_fails"] >= BUY_FAILS_PAUSE and not LZT_STATE["buy_paused"]:
+                LZT_STATE["buy_paused"] = True
+                await _admin_note(
+                    f"{emoji.tag('🛡')} <b>Покупки на паузе</b>: LZT {BUY_FAILS_PAUSE} раза подряд отказал в покупке "
+                    f"(«{html.escape(str(exc))[:200]}»). Деньги покупателям вернулись.\n"
+                    "Проверьте аккаунт LZT: купите любой лот вручную на сайте — он покажет причину. "
+                    "Включить покупки снова: /buy_on")
         row = await db.fail_order(oid, str(exc))
         if row is not None:
             await db.add_kop(uid, int(row["price_kop"]), "refund", f"order#{oid}")
             await notify(uid, "refund", order=oid, amount=money(int(row["price_kop"])))
             await _admin_note(f"{emoji.tag('↩️')} Заказ #{oid} не куплен на LZT, деньги вернули: {exc}")
         return
+    LZT_STATE.update(buy_fails=0)
     await db.finish_order(oid, got["phone"], got["password"], got["raw"], int(round(got["cost"] * 100)))
     await notify(uid, "done", order=oid, phone=got["phone"])
     await _admin_note(f"{emoji.tag('🛒')} Продажа #{oid}: {emoji.tag(flag(order['country']))}{name_ru(order['country'])} · "

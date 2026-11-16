@@ -7,6 +7,7 @@ window.RTL = ["ar"];
 
 window.I18N = {
 en: {
+  buy_paused: "Purchases are temporarily unavailable — we're fixing it. Your balance is safe.",
   provider: "This payment method isn't working right now — choose another",
   sub_title: "Subscribe to our channel", sub_text: "The market is available to subscribers of {ch} only. Subscribe and tap “Check subscription”.", sub_btn: "Subscribe", sub_check: "Check subscription", sub_fail: "You haven't subscribed to the channel yet",
   too_many: "Too many unpaid invoices — pay one or wait 30 minutes",
@@ -48,6 +49,7 @@ en: {
   ton_hint: "Send {a} TON with the comment {c}", step: "Step {n} of {m}", not_found: "Not found", slow_down: "Too often — wait a few seconds",
 },
 ru: {
+  buy_paused: "Покупки временно недоступны — мы уже чиним. Баланс в безопасности.",
   provider: "Этот способ оплаты сейчас не работает — выберите другой",
   sub_title: "Подпишитесь на наш канал", sub_text: "Маркет работает только для подписчиков канала {ch}. Подпишитесь и нажмите «Проверить подписку».", sub_btn: "Подписаться", sub_check: "Проверить подписку", sub_fail: "Вы ещё не подписались на канал",
   too_many: "Слишком много неоплаченных счетов — оплатите или подождите 30 минут",
@@ -89,6 +91,7 @@ ru: {
   ton_hint: "Переведите {a} TON с комментарием {c}", step: "Шаг {n} из {m}", not_found: "Не найдено", slow_down: "Слишком часто — подождите пару секунд",
 },
 es: {
+  buy_paused: "Las compras no están disponibles por ahora; lo estamos arreglando. Tu saldo está a salvo.",
   provider: "Este método de pago no funciona ahora: elige otro",
   sub_title: "Suscríbete a nuestro canal", sub_text: "El mercado solo está disponible para los suscriptores de {ch}. Suscríbete y pulsa «Comprobar suscripción».", sub_btn: "Suscribirse", sub_check: "Comprobar suscripción", sub_fail: "Aún no te has suscrito al canal",
   too_many: "Demasiadas facturas sin pagar: paga una o espera 30 minutos",
@@ -130,6 +133,7 @@ es: {
   ton_hint: "Envía {a} TON con el comentario {c}", step: "Paso {n} de {m}", not_found: "No encontrado", slow_down: "Demasiado seguido, espera unos segundos",
 },
 ar: {
+  buy_paused: "الشراء غير متاح مؤقتًا — نعمل على الإصلاح. رصيدك آمن.",
   provider: "طريقة الدفع هذه لا تعمل الآن — اختر أخرى",
   sub_title: "اشترك في قناتنا", sub_text: "المتجر متاح لمشتركي {ch} فقط. اشترك ثم اضغط «تحقق من الاشتراك».", sub_btn: "اشترك", sub_check: "تحقق من الاشتراك", sub_fail: "لم تشترك في القناة بعد",
   too_many: "فواتير غير مدفوعة كثيرة — ادفع واحدة أو انتظر 30 دقيقة",
@@ -171,6 +175,7 @@ ar: {
   ton_hint: "أرسل {a} TON مع التعليق {c}", step: "الخطوة {n} من {m}", not_found: "غير موجود", slow_down: "بسرعة كبيرة — انتظر ثوانيَ",
 },
 hi: {
+  buy_paused: "खरीदारी अभी उपलब्ध नहीं — हम ठीक कर रहे हैं। आपका बैलेंस सुरक्षित है।",
   provider: "यह भुगतान तरीका अभी काम नहीं कर रहा — दूसरा चुनें",
   sub_title: "हमारे चैनल को सब्सक्राइब करें", sub_text: "मार्केट केवल {ch} के सब्सक्राइबर्स के लिए है। सब्सक्राइब करें और «सब्सक्रिप्शन जाँचें» दबाएँ।", sub_btn: "सब्सक्राइब करें", sub_check: "सब्सक्रिप्शन जाँचें", sub_fail: "आपने अभी चैनल सब्सक्राइब नहीं किया",
   too_many: "बहुत सारे बिना भुगतान वाले बिल — एक भरें या 30 मिनट रुकें",
@@ -212,6 +217,7 @@ hi: {
   ton_hint: "{c} टिप्पणी के साथ {a} TON भेजें", step: "चरण {n} / {m}", not_found: "नहीं मिला", slow_down: "बहुत जल्दी — कुछ सेकंड रुकें",
 },
 zh: {
+  buy_paused: "购买暂时不可用，我们正在修复。你的余额是安全的。",
   provider: "该支付方式暂时不可用，请选择其他方式",
   sub_title: "请订阅我们的频道", sub_text: "商城仅对 {ch} 的订阅者开放。订阅后点击「检查订阅」。", sub_btn: "订阅", sub_check: "检查订阅", sub_fail: "你还没有订阅频道",
   too_many: "未付款账单过多——请先支付或等待 30 分钟",

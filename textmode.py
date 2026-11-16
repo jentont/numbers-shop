@@ -509,6 +509,9 @@ async def legal(c: CallbackQuery) -> None:
 
 
 def _err_text(e: shop.ShopError, lang: str) -> str:
+    if e.code == "buy_paused":
+        return ("Покупки временно недоступны — мы уже чиним. Баланс в безопасности." if lang == "ru"
+                else "Purchases are temporarily unavailable — we're fixing it. Your balance is safe.")
     if e.code == "banned":
         return _legal(lang)[4]
     if e.code == "day_limit":

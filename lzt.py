@@ -166,15 +166,15 @@ async def search(country: str = "", pmin: float = 0, pmax: float = 0, premium: s
 
 #: В каком виде маркет принимает страну в фильтре поиска. Схема API пишет просто
 #: «строка», поэтому формат подбирается при запуске (probe_country_format):
-#: iso3 (RUS) · iso2 (RU) · lower (ru) · name (Russia) · none (фильтр не работает).
+#: iso3 (RUS) · iso2 (RU) · lower (ru) · name (Russia) · ru (Россия) · none (фильтр не работает).
 COUNTRY_FMT = {"fmt": "iso3", "probed": False}
-FORMATS = ("iso3", "iso2", "lower", "name")
+FORMATS = ("iso3", "iso2", "lower", "name", "ru")
 
 
 def _country_value(country: str, fmt: str) -> str:
-    from countries import _EN_NAMES, iso2
+    from countries import _EN_NAMES, iso2, name_ru
     return {"iso3": country, "iso2": iso2(country), "lower": iso2(country).lower(),
-            "name": _EN_NAMES.get(country, country)}.get(fmt, country)
+            "name": _EN_NAMES.get(country, country), "ru": name_ru(country)}.get(fmt, country)
 
 
 async def probe_country_format() -> dict[str, int]:
@@ -260,7 +260,16 @@ async def buy(item_id: int, max_price: float) -> dict:
         rnd = random.Random(item_id)
         phone = f"+{dial}{rnd.randint(10**8, 10**9 - 1)}"
         return {"phone": phone, "password": "", "cost": lot["cost"], "raw": {"demo": True}}
-    data = await _call("POST", f"/{item_id}/fast-buy", json={"price": round(max_price, 2)})
+    # Маркет проверяет аккаунт перед продажей и может ответить retry_request —
+    # документация велит повторить тот же запрос (до 100 раз).
+    for attempt in range(30):
+        try:
+            data = await _call("POST", f"/{item_id}/fast-buy", json={"price": round(max_price, 2)})
+            break
+        except LztError as exc:
+            if "retry_request" not in str(exc) or attempt == 29:
+                raise
+            await asyncio.sleep(2)
     raw = data.get("item") or data
     phone, password = _login(raw)
     cost = _num(raw.get("rub_price"), 0) or _num(raw.get("price"), 0) or max_price

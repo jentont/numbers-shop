@@ -70,6 +70,46 @@ async def main():
     lots = await shop.lots("MAR", {})
     check("фильтр страны не работает — страна всё равно из общего обхода", len(lots) == 3)
 
+    # покупка: retry_request повторяется, 403 трижды подряд ставит покупки на паузу
+    tries = {"n": 0}
+
+    async def buy_call(method, path, params=None, json=None):
+        if path.endswith("/fast-buy"):
+            tries["n"] += 1
+            if tries["n"] < 3:
+                raise lzt.LztError("POST fast-buy → 400: retry_request")
+            return {"item": {"item_id": 1, "loginData": {"login": "79990001122", "password": "pw"}, "rub_price": 20}}
+        return await fake_call(method, path, params, json)
+
+    lzt._call = buy_call  # noqa: SLF001
+    real_sleep = asyncio.sleep
+
+    async def no_sleep(*_):
+        await real_sleep(0)
+
+    asyncio.sleep = no_sleep
+    got = await lzt.buy(1, 20)
+    check("retry_request повторяется до успеха", tries["n"] == 3 and got["phone"] == "+79990001122")
+
+    async def deny(item_id, cost):
+        raise lzt.LztError("POST /1/fast-buy → 403: У Вас нет прав для этого действия.")
+
+    lzt.buy = deny
+    import db
+    await db.touch_user(50, "B", "")
+    await db.accept_terms(50)
+    for i in range(3):
+        oid = await db.create_order(50, "live", 900 + i, "RUS", 1000, 1200)
+        await shop._fulfil(oid, 900 + i, 10)  # noqa: SLF001
+    check("3 отказа 403 подряд — покупки на паузе", shop.LZT_STATE["buy_paused"])
+    try:
+        await shop.guard(50)
+        paused = False
+    except shop.ShopError as e:
+        paused = e.code == "buy_paused"
+    check("на паузе новые покупки не начинаются (деньги не списываются)", paused)
+    asyncio.sleep = real_sleep
+
     print("\nПОИСК LZT: ВСЁ В ПОРЯДКЕ" if not FAILS else f"\nОШИБКИ: {len(FAILS)}")
     sys.exit(1 if FAILS else 0)
 

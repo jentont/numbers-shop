@@ -221,6 +221,7 @@ function goBack() {
 async function loadHome() {
   try { S.home = await api("/api/home"); } catch (e) { toast(errText(e)); return; }
   $("#demo").hidden = !S.home.demo;
+  if (S.home.buy_paused) { $("#demo").hidden = false; $("#demo").textContent = t("buy_paused"); }
   renderHome();
 }
 function renderCats() {
