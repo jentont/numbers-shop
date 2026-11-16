@@ -22,6 +22,7 @@ import asyncio
 import hashlib
 import logging
 import random
+import re
 import time
 from typing import Any
 
@@ -199,19 +200,82 @@ async def search(country: str = "", pmin: float = 0, pmax: float = 0, premium: s
 #: «строка», поэтому формат подбирается при запуске (probe_country_format):
 #: iso3 (RUS) · iso2 (RU) · lower (ru) · name (Russia) · ru (Россия) · none (фильтр не работает).
 COUNTRY_FMT = {"fmt": "iso3", "probed": False}
-FORMATS = ("iso3", "iso2", "lower", "name", "ru")
+FORMATS = ("params", "iso3", "iso2", "lower", "name", "ru")
 
 
 def _country_value(country: str, fmt: str) -> str:
     from countries import _EN_NAMES, iso2, name_ru
     return {"iso3": country, "iso2": iso2(country), "lower": iso2(country).lower(),
-            "name": _EN_NAMES.get(country, country), "ru": name_ru(country)}.get(fmt, country)
+            "name": _EN_NAMES.get(country, country), "ru": name_ru(country),
+            "params": COUNTRY_VALUES.get(iso2(country), "")}.get(fmt, country)
+
+
+#: Значение фильтра страны из /telegram/params, если маркет его отдал: ISO-2 → значение.
+COUNTRY_VALUES: dict[str, str] = {}
+
+
+def _scan_countries(obj, out: dict[str, str]) -> None:
+    """Ищет в ответе /telegram/params список стран: пары «значение — название/код»."""
+    from countries import to_iso3, iso2
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            # Словарь вариантов: ключ — значение для фильтра, значение — подпись (или наоборот код).
+            if isinstance(v, (str, int)) and str(k).lower() not in ("title", "name", "type", "value", "id", "key"):
+                c3 = to_iso3(str(v)) or to_iso3(str(k))
+                code = iso2(c3) if c3 else ""
+                if code:
+                    out.setdefault(code, str(k))
+            _scan_countries(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            if isinstance(v, dict):
+                val = v.get("value", v.get("id", v.get("key")))
+                lab = v.get("title", v.get("name", v.get("label", "")))
+                c3 = to_iso3(str(lab)) or to_iso3(str(val or ""))
+                if c3 and val is not None:
+                    out.setdefault(iso2(c3), str(val))
+            _scan_countries(v, out)
+
+
+async def country_params() -> dict:
+    """Спрашивает у маркета допустимые значения фильтров категории Telegram."""
+    data = await _call("GET", "/telegram/params")
+    found: dict[str, str] = {}
+    for key in ("country", "country[]", "countries"):
+        node = _find_key(data, key)
+        if node is not None:
+            _scan_countries(node, found)
+    COUNTRY_VALUES.clear()
+    COUNTRY_VALUES.update(found)
+    return data
+
+
+def _find_key(obj, key):
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for v in obj.values():
+            r = _find_key(v, key)
+            if r is not None:
+                return r
+    elif isinstance(obj, list):
+        for v in obj:
+            r = _find_key(v, key)
+            if r is not None:
+                return r
+    return None
 
 
 async def probe_country_format() -> dict[str, int]:
     """Пробует форматы страны на России. Возвращает {формат: найдено лотов}."""
     found: dict[str, int] = {}
+    try:
+        await country_params()
+    except LztError as exc:
+        log.info("/telegram/params: %s", exc)
     for fmt in FORMATS:
+        if not _country_value("RUS", fmt):
+            continue
         try:
             data = await _call("GET", "/telegram", params=[("order_by", "price_to_up"), ("currency", "rub"),
                                                            ("country[]", _country_value("RUS", fmt))])
@@ -225,12 +289,27 @@ async def probe_country_format() -> dict[str, int]:
     return found
 
 
-async def crawl(order: str, pages: int) -> list[dict]:
-    """Общий каталог без фильтра страны: pages страниц подряд. Страны раскладываем у себя."""
+def bands() -> list[tuple[float, float, int]]:
+    """CRAWL_BANDS «30-80:8,80-200:8» → [(30, 80, 8), (80, 200, 8)]. Кривые куски пропускаем."""
+    out = []
+    for part in config.CRAWL_BANDS.split(","):
+        try:
+            rng, pages = part.strip().split(":")
+            lo, hi = rng.split("-")
+            out.append((float(lo), min(float(hi), config.LZT_MAX_PRICE), max(1, min(20, int(pages)))))
+        except ValueError:
+            continue
+    return out
+
+
+async def crawl(order: str, pages: int, pmin: float = 0, pmax: float = 0) -> list[dict]:
+    """Общий каталог без фильтра страны: pages страниц подряд (в коридоре цены). Страны раскладываем у себя."""
     out: list[dict] = []
     for page in range(1, pages + 1):
-        data = await _call("GET", "/telegram", params=[("order_by", order), ("currency", "rub"),
-                                                       ("pmax", config.LZT_MAX_PRICE), ("page", page)])
+        params = [("order_by", order), ("currency", "rub"), ("pmax", pmax or config.LZT_MAX_PRICE), ("page", page)]
+        if pmin:
+            params.append(("pmin", pmin))
+        data = await _call("GET", "/telegram", params=params)
         out += [normalize(i) for i in data.get("items") or []]
         if not data.get("hasNextPage"):
             break
@@ -316,16 +395,56 @@ async def login_code(item_id: int) -> dict | None:
     if config.LZT_DEMO:
         return {"code": f"{random.randint(10000, 99999)}", "date": int(time.time())}
     data = await _call("GET", f"/{item_id}/telegram-login-code")
-    best = None
-    for c in data.get("codes") or []:
-        digits = "".join(ch for ch in str(c.get("code") or "") if ch.isdigit())
-        if 4 <= len(digits) <= 6 and (best is None or _num(c.get("date")) > best["date"]):
-            best = {"code": digits, "date": int(_num(c.get("date")))}
+    best = parse_login_code(data)
     if best is None:
-        flat = "".join(ch for ch in str(data.get("code") or "") if ch.isdigit())
-        if 4 <= len(flat) <= 6:
-            best = {"code": flat, "date": 0}
+        log.warning("код входа для %s не найден, ответ LZT: %.600s", item_id, data)
     return best
+
+
+_CODE_RE = re.compile(r"(?<![\d+])(\d{5,6})(?!\d|[.,]\d)")
+_CODE_KEYS = ("code", "login_code", "loginCode", "telegram_code")
+_DATE_KEYS = ("date", "time", "created_at", "createdAt", "timestamp", "message_date")
+
+
+def _date_of(node: dict) -> int:
+    for k in _DATE_KEYS:
+        v = node.get(k)
+        if isinstance(v, (int, float)) or (isinstance(v, str) and v.isdigit()):
+            return int(_num(v))
+    return 0
+
+
+def parse_login_code(data) -> dict | None:
+    """Код входа из ответа LZT в любом его виде.
+
+    Маркет отдаёт то {"codes": [{"code", "date"}]}, то {"code": "12345"}, то
+    текст сообщения Telegram («Login code: 12345. Do not give…»). Ищем по всему
+    ответу: сначала поля с кодом, потом цифры в текстах; берём самый свежий.
+    """
+    found: list[tuple[int, int, str]] = []          # (дата, приоритет, код)
+
+    def walk(node, date: int) -> None:
+        if isinstance(node, dict):
+            d = _date_of(node) or date
+            for k, v in node.items():
+                if k in _CODE_KEYS and isinstance(v, (str, int)):
+                    digits = "".join(ch for ch in str(v) if ch.isdigit())
+                    if 4 <= len(digits) <= 6:
+                        found.append((d, 1, digits))
+                        continue
+                walk(v, d)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v, date)
+        elif isinstance(node, str):
+            for m in _CODE_RE.finditer(node):
+                found.append((date, 0, m.group(1)))
+
+    walk(data, 0)
+    if not found:
+        return None
+    d, _, code = max(found)
+    return {"code": code, "date": d}
 
 
 async def check_owned(item_id: int) -> str:

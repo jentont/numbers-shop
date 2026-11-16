@@ -192,6 +192,16 @@ async def main():
     lzt.balance = real_balance
     shop._admin_note = real_note  # noqa: SLF001
 
+    # код входа: в любом виде ответа, самый свежий
+    P = lzt.parse_login_code
+    check("код из списка codes — самый свежий",
+          P({"codes": [{"code": "12345", "date": 1}, {"code": "67890", "date": 5}]})["code"] == "67890")
+    check("код из текста сообщения Telegram",
+          P({"messages": [{"text": "Login code: 48213. Do not give this code", "date": 9}]})["code"] == "48213")
+    check("номер телефона и цены за код не принимаются",
+          P({"item": {"phone": "+15551234567", "note": "price 12345.50"}}) is None)
+    check("пустой ответ — кода нет", P({"codes": []}) is None)
+
     print("\nПОИСК LZT: ВСЁ В ПОРЯДКЕ" if not FAILS else f"\nОШИБКИ: {len(FAILS)}")
     sys.exit(1 if FAILS else 0)
 

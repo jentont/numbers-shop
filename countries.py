@@ -99,7 +99,7 @@ def to_iso3(raw: str) -> str:
     if not s:
         return ""
     up = s.upper()
-    if len(up) == 3 and up.isalpha():
+    if len(up) == 3 and up.isascii() and up.isalpha() and up in COUNTRIES:
         return up
     if len(up) == 2 and up.isalpha():
         return _BY_ISO2.get(up, "")

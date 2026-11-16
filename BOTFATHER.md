@@ -9,7 +9,7 @@
 | | |
 |---|---|
 | Название | **Solutions Numbers** |
-| Юзернейм | **@SolutionsNumbersBot** (на 16.11.2026 свободен) |
+| Юзернейм | **@NumbersSolBot** (рабочий) |
 | Запасные | @SolutionsNumberBot, @SolNumbersBot, @SolutionsAccountsBot, @SolutionsNumbers_bot |
 
 `/newbot` → название `Solutions Numbers` → юзернейм `SolutionsNumbersBot`. Токен — в `.env` (`BOT_TOKEN`).

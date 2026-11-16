@@ -168,6 +168,14 @@ async def snapshot_worker() -> None:
                 await lzt.probe_country_format()
             cheap = await lzt.crawl("price_to_up", config.CRAWL_CHEAP_PAGES)
             fresh = await lzt.crawl("pdate_to_down", config.CRAWL_NEW_PAGES)
+            banded: list[dict] = []
+            for lo, hi, pages in lzt.bands():
+                banded += await lzt.crawl("pdate_to_down", pages, pmin=lo, pmax=hi)
+            cheap = cheap + banded
+            if lzt.COUNTRY_FMT["fmt"] != "none":
+                # Фильтр страны работает — Россию добираем точечно (самые ходовые).
+                for c3 in ("RUS", "KAZ", "UKR", "BLR", "UZB"):
+                    cheap += await lzt.search(country=c3, pages=3)
             _ingest(cheap + fresh)
             LZT_STATE.update(ok_at=time.time(), error="", crawled=len(cheap) + len(fresh))
             log.info("витрина: %s лотов, %s стран", len(cheap) + len(fresh), len(SNAP))

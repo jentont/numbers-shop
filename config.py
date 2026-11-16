@@ -75,6 +75,9 @@ CACHE_TTL = _i("CACHE_TTL", 90)
 #: Общий обход каталога за цикл: дешёвые + новые страницы (по ~40 лотов). 30 + 30 ≈ 2 400 лотов;
 #: новые лоты идут вперемешку по странам — они дают разнообразие стран.
 CRAWL_CHEAP_PAGES = _i("CRAWL_CHEAP_PAGES", 30)
+#: Ценовые коридоры «от-до:страниц» — чтобы в витрину попадали не только самые
+#: дешёвые (США/Индия), но и российские и дорогие аккаунты: с них больше маржа.
+CRAWL_BANDS = _s("CRAWL_BANDS", "30-80:8,80-200:8,200-600:6,600-3000:4")
 CRAWL_NEW_PAGES = _i("CRAWL_NEW_PAGES", 30)
 CRAWL_EVERY = _i("CRAWL_EVERY", 180)                   # секунд между обходами                        # секунд держим выдачу LZT
 
@@ -162,7 +165,7 @@ EDITABLE: dict[str, type] = {
     "GIVEAWAY_ON": bool, "GIVEAWAY_HOUR": int, "GIVEAWAY_MAX_PRICE": float, "GIVEAWAY_BROADCAST": bool,
     "REF_GOAL": int, "REF_PRIZE_MAX": float, "REF_DAILY_MAX": int,
     "MAX_PER_DAY": int, "MAX_PER_DAY_NEW": int, "GUARANTEE_H": int,
-    "TOPUP_MIN": float, "LZT_MAX_PRICE": float,
+    "TOPUP_MIN": float, "LZT_MAX_PRICE": float, "CRAWL_BANDS": str,
     "SELLER_MIN_SOLD": int, "SELLER_MAX_RESTORE": int, "SELLER_BLACKLIST": str, "SELLER_STRIKES": int,
     "CHANNEL": str, "CHANNEL_URL": str, "SUPPORT": str, "SUB_REQUIRED": bool,
 }

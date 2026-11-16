@@ -356,6 +356,7 @@ ADMIN_HELP = (
     "/broadcast текст — рассылка всем\n"
     "/lzt — почему нет лотов: токен, баланс, поиск\n"
     "/lzt_check ID — проверить лот перед покупкой (бесплатно), /lzt_buy ID — купить через API\n"
+    "/lzt_code ЗАКАЗ — что LZT отдаёт по коду входа (если покупателю «код не идёт»)\n"
     "/buy_on — снять паузу покупок\n"
     "/seller_ban НИК — не продавать лоты продавца, /seller_unban НИК — вернуть\n"
     "/emoji_list — какие премиум-эмодзи найдены, /emoji_set 📱 + премиум — заменить"
@@ -537,6 +538,39 @@ async def lzt_try(m: Message, command: CommandObject) -> None:
                        f"<code>{html.escape(str(exc))[:1500]}</code>")
 
 
+@router.message(Command("lzt_code"))
+async def lzt_code_cmd(m: Message, command: CommandObject) -> None:
+    """/lzt_code 12 (номер заказа) или ID лота — сырой ответ LZT по коду входа."""
+    if not _is_admin(m.from_user.id):
+        return
+    import json as _json
+    import lzt
+    arg = (command.args or "").strip().lstrip("#")
+    if not arg.isdigit():
+        return await m.answer("Формат: /lzt_code 12 (номер заказа) или /lzt_code 273051224 (ID лота)")
+    n = int(arg)
+    head = ""
+    item_id = n
+    if n < 10_000_000:
+        o = await db.get_order(n)
+        if o is None:
+            return await m.answer(f"Заказ #{n} не найден")
+        item_id = o["item_id"]
+        head = (f"Заказ #{n} · статус {html.escape(str(o['status']))} · "
+                f"страна {html.escape(str(o['country']))} · LZT {item_id}\n")
+    try:
+        data = await lzt._call("GET", f"/{item_id}/telegram-login-code")  # noqa: SLF001
+    except Exception as exc:  # noqa: BLE001
+        return await m.answer(f"{head}<b>Ошибка LZT</b>\n<code>{html.escape(str(exc))[:1500]}</code>")
+    best = lzt.parse_login_code(data)
+    got = (f"Найден код: <code>{best['code']}</code>"
+           + (f" от {time.strftime('%d.%m %H:%M', time.localtime(best['date']))}" if best["date"] else "")
+           if best else "Код в ответе не найден — на аккаунт ещё не приходил код. "
+                        "Пусть покупатель введёт номер в Telegram, дождётся «код отправлен» и нажмёт «Получить код» снова.")
+    raw = _json.dumps(data, ensure_ascii=False)[:2500]
+    await m.answer(f"{head}{got}\n\n<b>Ответ LZT:</b>\n<code>{html.escape(raw)}</code>")
+
+
 @router.message(Command("seller_ban", "seller_unban"))
 async def seller_cmd(m: Message, command: CommandObject) -> None:
     if not _is_admin(m.from_user.id):
@@ -619,6 +653,16 @@ async def lzt_diag(m: Message) -> None:
     lines.append(f"Фильтр продавцов: от {config.SELLER_MIN_SOLD} продаж, восстановлений ≤ {config.SELLER_MAX_RESTORE}%, "
                  f"чёрный список: {html.escape(config.SELLER_BLACKLIST) or '—'}")
     found = await lzt.probe_country_format()
+    lines.append(f"Значения фильтра страны из /telegram/params: "
+                 + (html.escape(", ".join(f"{k}={v}" for k, v in list(lzt.COUNTRY_VALUES.items())[:8])) or "не найдены"))
+    by_price = {"<30": 0, "30–80": 0, "80–200": 0, "200+": 0}
+    rus = 0
+    for c3, (_, lots) in shop.SNAP.items():
+        for x in lots:
+            k = "<30" if x["cost"] < 30 else "30–80" if x["cost"] < 80 else "80–200" if x["cost"] < 200 else "200+"
+            by_price[k] += 1
+            rus += c3 == "RUS"
+    lines.append("Витрина по цене: " + ", ".join(f"{k} ₽: {v}" for k, v in by_price.items()) + f"; Россия: {rus}")
     lines.append("Фильтр страны (Россия): " + ", ".join(f"{k}={'ошибка' if v < 0 else v}" for k, v in found.items())
                  + f" → {lzt.COUNTRY_FMT['fmt']}")
     total = sum(len(v[1]) for v in shop.SNAP.values())
