@@ -26,6 +26,10 @@ python tools/test_admin.py       # админ-панель
 python tools/test_gate.py        # обязательная подписка и «никаких обычных эмодзи»
 ```
 
+## Оформление бота
+
+Название **Solutions Numbers**, юзернейм **@SolutionsNumbersBot**. Аватарка, баннер, картинка описания и превью Mini App — в `assets/brand/`; пошагово для BotFather — [BOTFATHER.md](BOTFATHER.md). Описание и команды на 6 языках бот ставит сам (`botprofile.py`).
+
 ## Подписка и премиум-эмодзи
 
 **Обязательная подписка** (`gate.py`): при `SUB_REQUIRED=1` и заданном `CHANNEL` бот, текстовая версия и API

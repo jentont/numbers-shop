@@ -54,7 +54,7 @@ async def worker() -> None:
 async def run_bot():
     from aiogram import Bot, Dispatcher
     from aiogram.client.default import DefaultBotProperties
-    from aiogram.types import BotCommand, MenuButtonWebApp, WebAppInfo
+    from aiogram.types import MenuButtonWebApp, WebAppInfo
 
     import bot as botmod
     import emoji
@@ -69,7 +69,9 @@ async def run_bot():
             await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Market", web_app=WebAppInfo(url=config.WEBAPP_URL)))
         except Exception as exc:  # noqa: BLE001
             log.warning("кнопка меню: %s", exc)
-    await bot.set_my_commands([BotCommand(command="start", description="Menu")])
+    import botprofile
+    # Название, описание, короткое описание и команды на 6 языках — в фоне, не тормозя запуск.
+    asyncio.create_task(botprofile.apply(bot))
     dp = Dispatcher()
     import adminpanel
     import textmode
