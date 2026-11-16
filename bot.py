@@ -496,6 +496,44 @@ async def reserve_now(m: Message) -> None:
         await m.answer(f"Резерв: {len(await db.reserve_ready())} шт")
 
 
+def _lot_id(arg: str) -> int:
+    """ID лота из «273051224» или из ссылки lzt.market/273051224/."""
+    import re
+    m = re.search(r"(\d{5,12})", arg or "")
+    return int(m.group(1)) if m else 0
+
+
+@router.message(Command("lzt_check", "lzt_buy"))
+async def lzt_try(m: Message, command: CommandObject) -> None:
+    """Проба покупки через API на живом лоте: точный ответ маркета.
+
+    /lzt_check — проверка лота перед покупкой (ничего не покупает),
+    /lzt_buy — настоящая покупка с баланса LZT (аккаунт останется у вас на маркете).
+    """
+    if not _is_admin(m.from_user.id):
+        return
+    import json as _json
+    import lzt
+    item_id = _lot_id(command.args or "")
+    if not item_id:
+        return await m.answer(f"Формат: /{command.command} 273051224 (или ссылка на лот)")
+    real = command.command == "lzt_buy"
+    path = f"/{item_id}/fast-buy" if real else f"/{item_id}/check-account"
+    body = None
+    if real:
+        lot = await lzt.item(item_id)
+        if lot is None:
+            return await m.answer("Лот не найден на маркете")
+        body = {"price": lot["cost"]}
+    try:
+        data = await lzt._call("POST", path, json=body)  # noqa: SLF001
+        text = _json.dumps(data, ensure_ascii=False)[:2500]
+        await m.answer(f"<b>{'Покупка' if real else 'Проверка'} лота {item_id}: OK</b>\n<code>{html.escape(text)}</code>")
+    except Exception as exc:  # noqa: BLE001
+        await m.answer(f"<b>{'Покупка' if real else 'Проверка'} лота {item_id}: ошибка</b>\n"
+                       f"<code>{html.escape(str(exc))[:1500]}</code>")
+
+
 @router.message(Command("buy_on"))
 async def buy_on(m: Message) -> None:
     if _is_admin(m.from_user.id):
@@ -539,6 +577,14 @@ async def lzt_diag(m: Message) -> None:
         lines.append(f"{title}: лотов {len(items)} из {data.get('totalItems', '?')}; страны в ответе: "
                      + html.escape(", ".join(f"{k}×{v}" for k, v in raw.most_common(8)) or "—")
                      + (f"; <b>не распознаны</b>: {html.escape(', '.join(unknown[:8]))}" if unknown else ""))
+    cheapest = min((x for _, (_, lots) in shop.SNAP.items() for x in lots), key=lambda x: x["cost"], default=None)
+    if cheapest:
+        try:
+            await lzt._call("POST", f"/{cheapest['id']}/check-account")  # noqa: SLF001
+            lines.append(f"Проверка перед покупкой (лот {cheapest['id']}): OK — покупка через API разрешена")
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"Проверка перед покупкой (лот {cheapest['id']}): <b>ошибка</b> "
+                         f"<code>{html.escape(str(exc))[:250]}</code>")
     found = await lzt.probe_country_format()
     lines.append("Фильтр страны (Россия): " + ", ".join(f"{k}={'ошибка' if v < 0 else v}" for k, v in found.items())
                  + f" → {lzt.COUNTRY_FMT['fmt']}")
