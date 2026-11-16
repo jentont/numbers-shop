@@ -36,6 +36,8 @@ SNAP: dict[str, tuple[float, list[dict]]] = {}
 #: Лента «завоза»: новые лоты, которых не было в прошлом снимке.
 ARRIVALS: list[dict] = []
 _seen: dict[str, set[int]] = {}
+#: Последний успех и последняя ошибка LZT — для витрины, /lzt и админки.
+LZT_STATE: dict = {"ok_at": 0.0, "error": "", "error_at": 0.0}
 _code_at: dict[int, float] = {}
 #: Покупки одного человека идут строго по очереди: иначе 50 параллельных
 #: запросов проскочат проверки (лимит, бан) одновременно.
@@ -123,8 +125,13 @@ async def snapshot_worker() -> None:
         for c3 in order:
             try:
                 await refresh_country(c3)
+                LZT_STATE.update(ok_at=time.time(), error="")
             except Exception as exc:  # noqa: BLE001 — одна страна не роняет остальные
-                log.debug("снимок %s: %s", c3, exc)
+                # Не молчим: без этого пустой каталог выглядит как «нет товара».
+                LZT_STATE.update(error=f"{type(exc).__name__}: {exc}"[:300], error_at=time.time())
+                log.warning("LZT, страна %s: %s", c3, exc)
+                await _admin_note(f"{emoji.tag('🛡')} LZT не отдаёт лоты: {html.escape(str(exc))[:300]}\n"
+                                  "Проверьте LZT_TOKEN (право market) и баланс. Подробно: /lzt", key="lzt_down")
             await asyncio.sleep(0.2 if config.LZT_DEMO else 5)
         if config.LZT_DEMO:
             await asyncio.sleep(60)
@@ -164,6 +171,8 @@ async def home() -> dict:
         "arrivals": ARRIVALS[:10],
         "instant": inst_cards,
         "demo": config.LZT_DEMO,
+        # Каталог пуст из-за сбоя маркета, а не потому, что товара нет.
+        "market_down": not countries and bool(LZT_STATE["error"]),
     }
 
 
@@ -590,6 +599,27 @@ async def ref_confirm(uid: int, full: bool = False) -> int:
         await db.run("UPDATE users SET ref_ok=? WHERE id=?", (1 if ok else 0, r["id"]))
         n += ok
     return n
+
+
+async def ref_subscribed(uid: int) -> bool:
+    """Друг подписался на канал — засчитываем его пригласившему сразу и пишем тому об этом.
+
+    Вызывается, как только подписка подтверждена (кнопка «Проверить подписку»,
+    /start подписчика, проверка в Mini App). Засчитывается один раз:
+    UPDATE с условием ref_ok=0.
+    """
+    u = await db.get_user(uid)
+    if not u or not u["ref_by"] or u["ref_ok"]:
+        return False
+    if not await is_subscribed(uid):
+        return False
+    cur = await db.run("UPDATE users SET ref_ok=1 WHERE id=? AND ref_ok=0", (uid,))
+    if cur.rowcount != 1:
+        return False
+    inviter = int(u["ref_by"])
+    st = await ref_state(inviter)
+    await notify(inviter, "ref_ok", name=u["name"] or "—", n=st["progress"], goal=st["goal"])
+    return True
 
 
 async def ref_claim(uid: int) -> dict:

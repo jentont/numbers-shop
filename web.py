@@ -145,7 +145,10 @@ async def _need_sub(uid: int) -> bool:
 async def recheck_sub(req):
     u = await _user_nogate(req)
     shop.forget_sub(u["id"])
-    return ok({"need_sub": await _need_sub(u["id"])})
+    need = await _need_sub(u["id"])
+    if not need:
+        await shop.ref_subscribed(u["id"])
+    return ok({"need_sub": need})
 
 
 async def accept(req):

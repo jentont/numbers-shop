@@ -124,6 +124,7 @@ async def check(c: CallbackQuery) -> None:
     if active() and not await shop.is_subscribed(c.from_user.id):
         return await c.answer(texts(lang)[3], show_alert=True)
     await c.answer()
+    await shop.ref_subscribed(c.from_user.id)   # друг засчитывается пригласившему сразу
     try:
         await c.message.delete()
     except TelegramAPIError:

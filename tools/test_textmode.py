@@ -122,7 +122,9 @@ async def main() -> None:
     await go(upd_cb(1, "tm:c:RUS:cheap:0"))
     lots = [x for x in buttons() if x.startswith("tm:l:")]
     check(f"страна: лоты страницами (≤{textmode.PER_L})", 0 < len(lots) <= textmode.PER_L)
-    check("есть листание страниц", any(x.startswith("tm:c:RUS:cheap:1") for x in buttons()))
+    total = len(await shop.lots("RUS", {}))
+    check("есть листание страниц (если лотов больше одной страницы)",
+          total <= textmode.PER_L or any(x.startswith("tm:c:RUS:cheap:1") for x in buttons()))
 
     await go(upd_cb(1, lots[0]))
     check("карточка лота с ценой", "Купить" in str([b for b in SENT[-2:]]) or any(x.startswith("tm:bq:") for x in buttons()))

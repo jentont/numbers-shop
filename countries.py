@@ -29,8 +29,23 @@ COUNTRIES: dict[str, tuple[str, str, str]] = {
 
 _BY_ISO2 = {v[0]: k for k, v in COUNTRIES.items()}
 _BY_NAME = {v[2].lower(): k for k, v in COUNTRIES.items()}
-_EN = {"russia": "RUS", "ukraine": "UKR", "kazakhstan": "KAZ", "united states": "USA", "usa": "USA",
-       "united kingdom": "GBR", "germany": "DEU", "india": "IND", "indonesia": "IDN", "turkey": "TUR"}
+_EN_NAMES = {
+    "RUS": "Russia", "UKR": "Ukraine", "KAZ": "Kazakhstan", "BLR": "Belarus", "UZB": "Uzbekistan",
+    "KGZ": "Kyrgyzstan", "TJK": "Tajikistan", "GEO": "Georgia", "ARM": "Armenia", "AZE": "Azerbaijan",
+    "MDA": "Moldova", "USA": "United States", "CAN": "Canada", "GBR": "United Kingdom", "DEU": "Germany",
+    "FRA": "France", "ITA": "Italy", "ESP": "Spain", "PRT": "Portugal", "NLD": "Netherlands", "POL": "Poland",
+    "CZE": "Czechia", "ROU": "Romania", "TUR": "Turkey", "ISR": "Israel", "ARE": "United Arab Emirates",
+    "SAU": "Saudi Arabia", "EGY": "Egypt", "NGA": "Nigeria", "KEN": "Kenya", "ZAF": "South Africa", "GHA": "Ghana",
+    "IND": "India", "PAK": "Pakistan", "BGD": "Bangladesh", "LKA": "Sri Lanka", "NPL": "Nepal", "IDN": "Indonesia",
+    "PHL": "Philippines", "VNM": "Vietnam", "THA": "Thailand", "MYS": "Malaysia", "MMR": "Myanmar",
+    "KHM": "Cambodia", "LAO": "Laos", "CHN": "China", "JPN": "Japan", "KOR": "South Korea", "BRA": "Brazil",
+    "MEX": "Mexico", "ARG": "Argentina", "COL": "Colombia", "PER": "Peru", "CHL": "Chile", "AUS": "Australia",
+}
+_EN = {v.lower(): k for k, v in _EN_NAMES.items()} | {
+    "usa": "USA", "us": "USA", "united states of america": "USA", "uk": "GBR", "great britain": "GBR",
+    "england": "GBR", "russian federation": "RUS", "czech republic": "CZE", "turkiye": "TUR", "türkiye": "TUR",
+    "uae": "ARE", "korea": "KOR", "republic of korea": "KOR", "viet nam": "VNM", "moldova, republic of": "MDA",
+}
 
 
 def to_iso3(raw: str) -> str:
@@ -43,7 +58,7 @@ def to_iso3(raw: str) -> str:
         return up
     if len(up) == 2 and up.isalpha():
         return _BY_ISO2.get(up, "")
-    low = s.lower()
+    low = s.lower().removeprefix("the ").strip()
     return _BY_NAME.get(low) or _EN.get(low, "")
 
 

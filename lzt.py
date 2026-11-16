@@ -148,29 +148,56 @@ async def search(country: str = "", pmin: float = 0, pmax: float = 0, premium: s
     if config.LZT_DEMO:
         lots = _demo_lots(country)
     else:
-        params: list[tuple[str, Any]] = [("order_by", order), ("currency", "rub")]
-        if country:
-            params.append(("country[]", country))
-        if pmin:
-            params.append(("pmin", pmin))
-        params.append(("pmax", pmax or config.LZT_MAX_PRICE))
+        # В маркет — только надёжные параметры. Фильтры по спамблоку и
+        # происхождению применяем у себя: если маркет не примет хоть одно
+        # значение фильтра, он отдаёт ошибку на весь поиск и каталог пустеет.
+        lots = await _fetch(country, pmin, pmax, premium, order, pages, COUNTRY_FMT["fmt"])
+        if country and not lots and COUNTRY_FMT["fmt"] == "iso3":
+            # Нет лотов по RUS — пробуем RU; подошло — запоминаем формат.
+            alt = await _fetch(country, pmin, pmax, premium, order, pages, "iso2")
+            if alt:
+                COUNTRY_FMT["fmt"] = "iso2"
+                log.warning("LZT: страны принимаются в формате ISO-2 (RU), переключился")
+                lots = alt
         if config.LZT_NO_SPAM:
-            params.append(("spam", "no"))
-        if premium in ("yes", "no"):
-            params.append(("premium", premium))
-        for o in config.LZT_ORIGINS:
-            params.append(("origin[]", o))
-        lots, after = [], None
-        for _ in range(max(1, pages)):
-            page = params + ([("after", after)] if after else [])
-            data = await _call("GET", "/telegram", params=page)
-            lots += [normalize(i) for i in data.get("items") or []]
-            after = data.get("nextCursor")
-            if not data.get("hasNextPage") or not after:
-                break
+            lots = [x for x in lots if not x["spam"]]
+        if config.LZT_ORIGINS:
+            lots = [x for x in lots if not x["origin"] or x["origin"] in config.LZT_ORIGINS]
     lots = [x for x in lots if x["id"] and x["cost"] > 0 and x["country"]]
     _cache[key] = (time.time(), lots)
     return lots
+
+
+#: В каком виде маркет принимает страну в поиске: "iso3" (RUS) или "iso2" (RU).
+COUNTRY_FMT = {"fmt": "iso3"}
+
+
+async def _fetch(country: str, pmin: float, pmax: float, premium: str, order: str, pages: int,
+                 fmt: str) -> list[dict]:
+    from countries import iso2
+    params: list[tuple[str, Any]] = [("order_by", order), ("currency", "rub")]
+    if country:
+        params.append(("country[]", iso2(country) if fmt == "iso2" else country))
+    if pmin:
+        params.append(("pmin", pmin))
+    params.append(("pmax", pmax or config.LZT_MAX_PRICE))
+    if premium in ("yes", "no"):
+        params.append(("premium", premium))
+    lots, after = [], None
+    for _ in range(max(1, pages)):
+        page = params + ([("after", after)] if after else [])
+        data = await _call("GET", "/telegram", params=page)
+        lots += [normalize(i) for i in data.get("items") or []]
+        after = data.get("nextCursor")
+        if not data.get("hasNextPage") or not after:
+            break
+    # Без фильтра по стране в ответе могут быть любые страны — оставляем свою.
+    return [x for x in lots if not country or x["country"] == country]
+
+
+async def raw_search(params: list[tuple[str, object]]) -> dict:
+    """Один запрос поиска как есть — для диагностики (/lzt)."""
+    return await _call("GET", "/telegram", params=params)
 
 
 async def item(item_id: int) -> dict | None:

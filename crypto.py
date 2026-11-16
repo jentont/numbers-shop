@@ -265,6 +265,14 @@ async def create(uid: int, provider: str, rub: float) -> dict:
     except Exception as exc:  # noqa: BLE001
         await db.update_invoice(inv_id, status="expired")
         log.warning("счёт #%s (%s) не выставлен: %s", inv_id, provider, exc)
+        import emoji
+        import html as _html
+        import shop
+        await shop._admin_note(  # noqa: SLF001
+            f"{emoji.tag('💳')} {TITLES.get(provider, provider)} не выставил счёт: "
+            f"<code>{_html.escape(str(exc))[:300]}</code>\nПроверьте токен в .env "
+            f"({'XROCKET_TOKEN — ключ Rocket Pay API' if provider == 'xrocket' else 'CRYPTOBOT_TOKEN' if provider == 'cryptobot' else 'TON_WALLET'}) "
+            f"и что тестовая сеть выключена.", key=f"pay_{provider}")
         raise PayError("provider") from exc
     await db.update_invoice(inv_id, asset=asset, amount=amount, rate=rate, pay_url=url,
                             external_id=ext or str(inv_id),

@@ -15,7 +15,8 @@ LANGS = {
 # tour — шаги обучения, done/refund/won/topup — уведомления, gw_new — анонс.
 T: dict[str, dict[str, str]] = {
     "en": {
-        "ref_new": "{name} joined via your link — {n} friends. Every {goal} friends = a free Telegram account.",
+        "ref_new": "{name} joined via your link. They'll count once they subscribe to the channel.",
+        "ref_ok": "{name} subscribed to the channel and counts as your friend: {n}/{goal}. Every {goal} friends = a free Telegram account.",
         "received": "{name} sent you {amount}. It's already on your balance.",
         "hi": "Welcome, {name}!",
         "menu": "Telegram accounts from 50+ countries. Prices are just 10% above the market, delivery is instant, every account is checked.",
@@ -29,7 +30,8 @@ T: dict[str, dict[str, str]] = {
         "gw_res": "Today's giveaway winner: {name}. A new draw is already open — join!",
     },
     "ru": {
-        "ref_new": "{name} пришёл(а) по вашей ссылке — друзей: {n}. Каждые {goal} друзей = бесплатный Telegram-аккаунт.",
+        "ref_new": "{name} пришёл(а) по вашей ссылке. Друг засчитается, как только подпишется на канал.",
+        "ref_ok": "{name} подписался(ась) на канал — друг засчитан: {n}/{goal}. Каждые {goal} друзей = бесплатный Telegram-аккаунт.",
         "received": "{name} отправил(а) вам {amount}. Уже на балансе.",
         "hi": "Добро пожаловать, {name}!",
         "menu": "Telegram-аккаунты 50+ стран. Цена всего на 10% выше маркета, выдача мгновенная, каждый аккаунт проверен.",
@@ -43,7 +45,8 @@ T: dict[str, dict[str, str]] = {
         "gw_res": "Победитель конкурса дня: {name}. Новый розыгрыш уже открыт — участвуйте!",
     },
     "es": {
-        "ref_new": "{name} se unió con tu enlace: {n} amigos. Cada {goal} amigos = una cuenta de Telegram gratis.",
+        "ref_new": "{name} se unió con tu enlace. Contará en cuanto se suscriba al canal.",
+        "ref_ok": "{name} se suscribió al canal y cuenta como tu amigo: {n}/{goal}. Cada {goal} amigos = una cuenta de Telegram gratis.",
         "received": "{name} te envió {amount}. Ya está en tu saldo.",
         "hi": "¡Bienvenido, {name}!",
         "menu": "Cuentas de Telegram de más de 50 países. Solo un 10% sobre el precio del mercado, entrega instantánea, cada cuenta verificada.",
@@ -57,7 +60,8 @@ T: dict[str, dict[str, str]] = {
         "gw_res": "Ganador del sorteo de hoy: {name}. ¡El nuevo sorteo ya está abierto!",
     },
     "ar": {
-        "ref_new": "انضم {name} عبر رابطك — {n} أصدقاء. كل {goal} أصدقاء = حساب تيليجرام مجاني.",
+        "ref_new": "انضم {name} عبر رابطك. سيُحتسب بمجرد اشتراكه في القناة.",
+        "ref_ok": "اشترك {name} في القناة وتم احتسابه: {n}/{goal}. كل {goal} أصدقاء = حساب تيليجرام مجاني.",
         "received": "أرسل لك {name} مبلغ {amount}. أصبح في رصيدك.",
         "hi": "مرحبًا، {name}!",
         "menu": "حسابات تيليجرام من أكثر من 50 دولة. السعر أعلى من السوق بـ10% فقط، تسليم فوري، وكل حساب مُفحوص.",
@@ -71,7 +75,8 @@ T: dict[str, dict[str, str]] = {
         "gw_res": "فائز سحب اليوم: {name}. السحب الجديد مفتوح الآن!",
     },
     "hi": {
-        "ref_new": "{name} आपके लिंक से जुड़े — {n} दोस्त। हर {goal} दोस्त = एक मुफ़्त Telegram अकाउंट।",
+        "ref_new": "{name} आपके लिंक से जुड़े। चैनल सब्सक्राइब करते ही गिने जाएँगे।",
+        "ref_ok": "{name} ने चैनल सब्सक्राइब किया — दोस्त गिना गया: {n}/{goal}। हर {goal} दोस्त = एक मुफ़्त Telegram अकाउंट।",
         "received": "{name} ने आपको {amount} भेजे। बैलेंस में जुड़ गए।",
         "hi": "स्वागत है, {name}!",
         "menu": "50+ देशों के Telegram अकाउंट। बाज़ार से सिर्फ़ 10% ज़्यादा, तुरंत डिलीवरी, हर अकाउंट जाँचा हुआ।",
@@ -85,7 +90,8 @@ T: dict[str, dict[str, str]] = {
         "gw_res": "आज के विजेता: {name}। नया ड्रॉ खुला है!",
     },
     "zh": {
-        "ref_new": "{name} 通过你的链接加入——已邀请 {n} 位好友。每 {goal} 位好友 = 一个免费 Telegram 账号。",
+        "ref_new": "{name} 通过你的链接加入。订阅频道后即计入。",
+        "ref_ok": "{name} 已订阅频道，计为你的好友：{n}/{goal}。每 {goal} 位好友 = 一个免费 Telegram 账号。",
         "received": "{name} 向你转了 {amount}，已到账。",
         "hi": "欢迎，{name}！",
         "menu": "来自 50 多个国家的 Telegram 账号。仅比市场价高 10%，即时发货，每个账号均已检测。",

@@ -135,6 +135,9 @@ async def main():
     check("после подписки — главное меню", "tm:cat:all:0" in buttons())
     await go(cb(1, "tm:cat:all:0"))
     check("после подписки каталог работает", any(b.startswith("tm:c:") for b in buttons()))
+    u1 = await db.get_user(1)
+    check("друг засчитан пригласившему сразу после подписки", u1["ref_ok"] == 1)
+    check("пригласившему пришло «друг засчитан»", any("засчитан" in t for _, t, _, _ in SENT))
     await go(msg(777, "/start"))
     check("админ проходит без подписки", "tm:cat:all:0" in buttons())
     BROKEN["on"] = True

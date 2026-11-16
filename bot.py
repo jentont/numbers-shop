@@ -170,6 +170,7 @@ async def start(m: Message, command: CommandObject) -> None:
             and not await shop.is_subscribed(m.from_user.id)):
         gate.PENDING[m.from_user.id] = args
         return await gate.send(m.bot, m.chat.id, lang)
+    await shop.ref_subscribed(m.from_user.id)
     await _send(m.bot, m.chat.id, menu_text(lang, m.from_user.first_name, int(u["kop"])), menu_kb, lang)
     if args == "gw":
         await _gw_card(m.bot, m.chat.id, m.from_user.id, lang)
@@ -303,7 +304,7 @@ async def paid(m: Message) -> None:
 
 async def notify(uid: int, kind: str, **kw) -> None:
     lang = await _lang_of(uid)
-    marks = {"done": "✅", "refund": "↩️", "won": "🏆", "topup": "💳", "received": "🎁", "ref_new": "👥"}
+    marks = {"done": "✅", "refund": "↩️", "won": "🏆", "topup": "💳", "received": "🎁", "ref_new": "👥", "ref_ok": "✅"}
     if "name" in kw:
         kw["name"] = html.escape(str(kw["name"]))
     text = f"{_e(marks.get(kind, '🔔'))} {i18n.t(kind, lang, **kw)}"
@@ -353,6 +354,7 @@ ADMIN_HELP = (
     "/reserve — докупить резерв сейчас\n"
     "/emoji — создать/обновить свой набор премиум-эмодзи\n"
     "/broadcast текст — рассылка всем\n"
+    "/lzt — почему нет лотов: токен, баланс, поиск\n"
     "/emoji_list — какие премиум-эмодзи найдены, /emoji_set 📱 + премиум — заменить"
 )
 
@@ -492,6 +494,44 @@ async def reserve_now(m: Message) -> None:
     if _is_admin(m.from_user.id):
         await shop.keep_reserve()
         await m.answer(f"Резерв: {len(await db.reserve_ready())} шт")
+
+
+@router.message(Command("lzt"))
+async def lzt_diag(m: Message) -> None:
+    """Почему нет лотов: токен, баланс, поиск, формат стран."""
+    if not _is_admin(m.from_user.id):
+        return
+    import lzt
+    from collections import Counter
+    from countries import to_iso3
+    tok = config.LZT_TOKEN
+    lines = ["<b>Диагностика LZT</b>",
+             f"Режим: {'ДЕМО (лоты выдуманы)' if config.LZT_DEMO else 'боевой'}",
+             f"Токен: {'нет' if not tok else html.escape(tok[:4] + '…' + tok[-4:]) + f' ({len(tok)} символов)'}"
+             + (" — <b>есть пробелы/переносы!</b>" if tok != tok.strip() or " " in tok else "")]
+    st = shop.LZT_STATE
+    if st["error"]:
+        lines.append(f"Последняя ошибка: <code>{html.escape(st['error'])}</code>")
+    if config.LZT_DEMO:
+        return await m.answer("\n".join(lines + ["", "Задайте LZT_TOKEN, чтобы включить боевой режим."]))
+    bal = await lzt.balance()
+    lines.append(f"Баланс: {'не получен' if bal is None else f'{bal:.2f} ₽'}")
+    for title, params in (("Все страны", [("order_by", "price_to_up"), ("currency", "rub")]),
+                          ("Россия (RUS)", [("order_by", "price_to_up"), ("currency", "rub"), ("country[]", "RUS")]),
+                          ("Россия (RU)", [("order_by", "price_to_up"), ("currency", "rub"), ("country[]", "RU")])):
+        try:
+            data = await lzt.raw_search(params)
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"{title}: <b>ошибка</b> <code>{html.escape(str(exc))[:250]}</code>")
+            continue
+        items = data.get("items") or []
+        raw = Counter(str(i.get("telegram_country")) for i in items)
+        unknown = [c for c in raw if not to_iso3(c)]
+        lines.append(f"{title}: лотов {len(items)} из {data.get('totalItems', '?')}; страны в ответе: "
+                     + html.escape(", ".join(f"{k}×{v}" for k, v in raw.most_common(8)) or "—")
+                     + (f"; <b>не распознаны</b>: {html.escape(', '.join(unknown[:8]))}" if unknown else ""))
+    lines.append(f"\nВ витрине сейчас стран: {sum(1 for _, (_, lots) in shop.SNAP.items() if lots)}")
+    await m.answer("\n".join(lines))
 
 
 @router.message(Command("emoji_set"))

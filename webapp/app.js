@@ -284,6 +284,7 @@ function renderCountries() {
   else if (S.csort === "down") list.sort((a, b) => b.from - a.from);
   else if (S.csort === "name") list.sort((a, b) => cn(a.country).localeCompare(cn(b.country), S.lang));
   $("#ccount").textContent = t("ccount", { n: list.length });
+  if (!list.length && h.market_down) { $("#countries").innerHTML = `<div class="empty" style="grid-column:1/-1">${ic("clock")}${t("market_down")}</div>`; $("#c-pager").innerHTML = ""; return; }
   $("#countries").innerHTML = list.length ? slice(list, "c").map((c) => `
     <button class="ctile" type="button" data-country="${c.country}">
       ${flag(c.country)}
