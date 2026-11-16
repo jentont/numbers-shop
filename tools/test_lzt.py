@@ -91,17 +91,49 @@ async def main():
     got = await lzt.buy(1, 20)
     check("retry_request повторяется до успеха", tries["n"] == 3 and got["phone"] == "+79990001122")
 
-    async def deny(item_id, cost):
-        raise lzt.LztError("POST /1/fast-buy → 403: У Вас нет прав для этого действия.")
-
-    lzt.buy = deny
     import db
     await db.touch_user(50, "B", "")
     await db.accept_terms(50)
+    shop.LZT_STATE.update(buy_paused=False, buy_fails=0)
+
+    # 1) первый лот мёртвый — бот сам покупает похожий из витрины, деньги не возвращаются
+    bought = []
+
+    async def dead_then_ok(item_id, cost):
+        if not bought and item_id == 101:
+            bought.append("dead")
+            raise lzt.LztError("POST /101/fast-buy → 403: Сессия недействительна (произведен выход или аккаунт заблокирован)")
+        bought.append(item_id)
+        return {"phone": "+79991112233", "password": "", "cost": cost, "raw": {}}
+
+    lzt.buy = dead_then_ok
+    oid = await db.create_order(50, "live", 101, "RUS", 2000, 5000)
+    await shop._fulfil(oid, 101, 20)  # noqa: SLF001
+    o = await db.get_order(oid)
+    check("мёртвый лот заменён похожим, заказ выдан", o["status"] == "done" and o["item_id"] != 101)
+    check("мёртвый лот убран из витрины", all(x["id"] != 101 for x in shop.SNAP.get("RUS", (0, []))[1]))
+    check("отказы по лотам не ставят покупки на паузу", not shop.LZT_STATE["buy_paused"])
+
+    # 2) замены дороже оплаченного не берём — возврат, мы не в минусе
+    async def always_dead(item_id, cost):
+        raise lzt.LztError("POST /x/fast-buy → 403: У Вас нет прав для этого действия.")
+
+    lzt.buy = always_dead
+    bal = (await db.get_user(50))["kop"]
+    oid = await db.create_order(50, "live", 201, "RUS", 1000, 1200)
+    await shop._fulfil(oid, 201, 10)  # noqa: SLF001
+    check("подходящей замены нет — заказ возвращён", (await db.get_order(oid))["status"] == "refunded"
+          and (await db.get_user(50))["kop"] == bal + 1200)
+
+    # 3) токен не принимается — после 3 таких отказов покупки на паузе
+    async def bad_token(item_id, cost):
+        raise lzt.LztError("POST /x/fast-buy → 401: Invalid or expired access token.")
+
+    lzt.buy = bad_token
     for i in range(3):
         oid = await db.create_order(50, "live", 900 + i, "RUS", 1000, 1200)
         await shop._fulfil(oid, 900 + i, 10)  # noqa: SLF001
-    check("3 отказа 403 подряд — покупки на паузе", shop.LZT_STATE["buy_paused"])
+    check("3 отказа из-за токена — покупки на паузе", shop.LZT_STATE["buy_paused"])
     try:
         await shop.guard(50)
         paused = False

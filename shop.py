@@ -365,38 +365,88 @@ async def _buy_lot(uid: int, item_id: int, expected: int) -> dict:
     return await order_view(await db.get_order(oid))
 
 
+#: Ошибки, при которых виноват сам аккаунт LZT/токен, а не конкретный лот.
+_AUTH_ERRORS = ("401", "invalid or expired access token", "access token", "scope", "токен")
+#: Сколько разных лотов пробуем купить за один заказ.
+LOT_ATTEMPTS = 5
+
+
+def _drop_lot(item_id: int) -> None:
+    """Лот мёртвый или недоступен — убираем из витрины сразу."""
+    for c3, (ts, lots) in list(SNAP.items()):
+        if any(x["id"] == item_id for x in lots):
+            SNAP[c3] = (ts, [x for x in lots if x["id"] != item_id])
+
+
+async def _alternatives(order, tried: set[int]) -> list[dict]:
+    """Похожие лоты той же страны, которые укладываются в оплаченную цену (с нашей наценкой)."""
+    promos = await _promos()
+    p = promos.get(order["country"], 0)
+    out = []
+    for x in sorted(SNAP.get(order["country"], (0, []))[1], key=lambda x: x["cost"]):
+        if x["id"] in tried or not allowed_lot(x) or await db.lzt_item_taken(x["id"]):
+            continue
+        if price_kop(x["cost"], p) <= int(order["price_kop"]):
+            out.append(x)
+    return out
+
+
 async def _fulfil(oid: int, item_id: int, cost: float, seller: dict | None = None) -> None:
+    """Покупает лот на LZT. Лот мёртвый или уже ушёл — берёт следующий похожий
+    (та же страна, цена с наценкой не выше оплаченной) до LOT_ATTEMPTS раз;
+    не вышло ни разу — возвращает деньги."""
     order = await db.get_order(oid)
     uid = int(order["user_id"])
-    try:
-        got = await lzt.buy(item_id, cost)
-    except Exception as exc:  # noqa: BLE001 — любая ошибка = возврат
-        log.warning("заказ #%s: LZT не продал %s: %s", oid, item_id, exc)
-        low = str(exc).lower()
-        # «лот уже купили / цена изменилась» — обычное дело; 403 и права — сбой аккаунта LZT.
-        if "403" in low or "прав" in low or "permission" in low or "401" in low:
-            LZT_STATE["buy_fails"] += 1
-            LZT_STATE["buy_error"] = str(exc)[:300]
-            if LZT_STATE["buy_fails"] >= BUY_FAILS_PAUSE and not LZT_STATE["buy_paused"]:
-                LZT_STATE["buy_paused"] = True
-                await _admin_note(
-                    f"{emoji.tag('🛡')} <b>Покупки на паузе</b>: LZT {BUY_FAILS_PAUSE} раза подряд отказал в покупке "
-                    f"(«{html.escape(str(exc))[:200]}»). Деньги покупателям вернулись.\n"
-                    "Проверьте аккаунт LZT: купите любой лот вручную на сайте — он покажет причину. "
-                    "Включить покупки снова: /buy_on")
-        row = await db.fail_order(oid, str(exc))
+    tried: set[int] = set()
+    errors: list[str] = []
+    cand = {"id": item_id, "cost": cost, **(seller or {})}
+    got = None
+    for _ in range(LOT_ATTEMPTS):
+        tried.add(int(cand["id"]))
+        try:
+            got = await lzt.buy(int(cand["id"]), float(cand["cost"]))
+            break
+        except Exception as exc:  # noqa: BLE001
+            log.warning("заказ #%s: LZT не продал %s: %s", oid, cand["id"], exc)
+            errors.append(f"{cand['id']}: {exc}")
+            _drop_lot(int(cand["id"]))
+            low = str(exc).lower()
+            if any(w in low for w in _AUTH_ERRORS):
+                # Сбой токена/аккаунта LZT: дальше пробовать бессмысленно.
+                LZT_STATE["buy_fails"] += 1
+                LZT_STATE["buy_error"] = str(exc)[:300]
+                if LZT_STATE["buy_fails"] >= BUY_FAILS_PAUSE and not LZT_STATE["buy_paused"]:
+                    LZT_STATE["buy_paused"] = True
+                    await _admin_note(
+                        f"{emoji.tag('🛡')} <b>Покупки на паузе</b>: токен LZT не принимается "
+                        f"(«{html.escape(str(exc))[:200]}»). Деньги покупателям вернулись.\n"
+                        "Проверьте LZT_TOKEN. Включить покупки снова: /buy_on")
+                break
+            alts = await _alternatives(order, tried)
+            if not alts:
+                break
+            cand = alts[0]
+    if got is None:
+        row = await db.fail_order(oid, "; ".join(errors)[-300:])
         if row is not None:
             await db.add_kop(uid, int(row["price_kop"]), "refund", f"order#{oid}")
             await notify(uid, "refund", order=oid, amount=money(int(row["price_kop"])))
-            await _admin_note(f"{emoji.tag('↩️')} Заказ #{oid} не куплен на LZT, деньги вернули: {exc}")
+            await _admin_note(f"{emoji.tag('↩️')} Заказ #{oid}: {len(tried)} лот(а) не купились, деньги вернули.\n"
+                              + html.escape("\n".join(errors))[:600])
         return
     LZT_STATE.update(buy_fails=0)
+    if int(cand["id"]) != item_id:
+        # Купили замену — в заказе её ID (по нему код входа и гарантия).
+        await db.run("UPDATE orders SET item_id=? WHERE id=?", (int(cand["id"]), oid))
+    seller_info = {"seller": cand.get("seller", ""), "seller_id": cand.get("seller_id", 0)}
     # Продавец — в данные заказа: по нему считаются жалобы «не работает».
-    await db.finish_order(oid, got["phone"], got["password"], {**got["raw"], **(seller or {})},
+    await db.finish_order(oid, got["phone"], got["password"], {**got["raw"], **seller_info},
                           int(round(got["cost"] * 100)))
+    _drop_lot(int(cand["id"]))
     await notify(uid, "done", order=oid, phone=got["phone"])
+    swap = f" (замена после {len(tried) - 1} недоступн.)" if len(tried) > 1 else ""
     await _admin_note(f"{emoji.tag('🛒')} Продажа #{oid}: {emoji.tag(flag(order['country']))}{name_ru(order['country'])} · "
-                      f"{money(int(order['price_kop']))} (закупка {money(int(round(got['cost'] * 100)))})\n"
+                      f"{money(int(order['price_kop']))} (закупка {money(int(round(got['cost'] * 100)))}){swap}\n"
                       f"{await who(uid)}")
 
 
