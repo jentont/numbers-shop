@@ -96,6 +96,7 @@ RESERVE_MAX_AGE_H = _i("RESERVE_MAX_AGE_H", 20)        # старше — в п�
 # ── Конкурс ───────────────────────────────────────────────────────────
 GIVEAWAY_ON = _b("GIVEAWAY_ON", True)
 GIVEAWAY_HOUR = _i("GIVEAWAY_HOUR", 20)                # час розыгрыша по МСК
+BACKUP_HOUR = _i("BACKUP_HOUR", 4)                     # копия базы админам каждый день в этот час МСК (-1 — выкл)
 GIVEAWAY_MAX_PRICE = _f("GIVEAWAY_MAX_PRICE", 15)      # приз — аккаунт не дороже 15 ₽
 GIVEAWAY_BROADCAST = _b("GIVEAWAY_BROADCAST", True)    # рассылка анонса и итогов
 
@@ -162,7 +163,7 @@ def webapp_enabled() -> bool:
 EDITABLE: dict[str, type] = {
     "MARKUP": float, "MIN_MARGIN_RUB": float, "STARS_MARKUP": float, "STAR_RUB": float,
     "RESERVE_SIZE": int, "RESERVE_MAX_PRICE": float, "RESERVE_COUNTRIES": list,
-    "GIVEAWAY_ON": bool, "GIVEAWAY_HOUR": int, "GIVEAWAY_MAX_PRICE": float, "GIVEAWAY_BROADCAST": bool,
+    "GIVEAWAY_ON": bool, "GIVEAWAY_HOUR": int, "BACKUP_HOUR": int, "GIVEAWAY_MAX_PRICE": float, "GIVEAWAY_BROADCAST": bool,
     "REF_GOAL": int, "REF_PRIZE_MAX": float, "REF_DAILY_MAX": int,
     "MAX_PER_DAY": int, "MAX_PER_DAY_NEW": int, "GUARANTEE_H": int,
     "TOPUP_MIN": float, "LZT_MAX_PRICE": float, "CRAWL_BANDS": str,

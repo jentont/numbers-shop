@@ -135,6 +135,12 @@ async def init(path=None) -> None:
     await _conn.execute("PRAGMA journal_mode=WAL")
     await _conn.execute("PRAGMA busy_timeout=5000")
     await _conn.executescript(SCHEMA)
+    await _migrate()
+    await load_overrides()        # настройки из /admin переживают перезапуск
+
+
+async def _migrate() -> None:
+    """Миграции для старых баз: новые колонки добавляются, если их нет."""
     # Миграции для старых баз: новые колонки добавляются, если их нет.
     cols = {r[1] for r in await (await _conn.execute("PRAGMA table_info(users)")).fetchall()}
     if "ref_by" not in cols:
@@ -155,6 +161,52 @@ async def init(path=None) -> None:
     ocols = {r[1] for r in await (await _conn.execute("PRAGMA table_info(orders)")).fetchall()}
     if "reported" not in ocols:
         await _conn.execute("ALTER TABLE orders ADD COLUMN reported INTEGER NOT NULL DEFAULT 0")
+
+
+# ── Резервные копии ───────────────────────────────────────────────────
+
+async def backup_file(dest) -> None:
+    """Целая копия базы одним файлом (без WAL): VACUUM INTO не мешает работе бота."""
+    from pathlib import Path
+    dest = Path(dest)
+    dest.unlink(missing_ok=True)
+    await run("VACUUM INTO ?", (str(dest),))
+
+
+def check_backup(src) -> dict:
+    """Проверяет файл перед восстановлением: это наша база и она целая."""
+    import sqlite3
+    try:
+        c = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        try:
+            if c.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise ValueError("файл повреждён")
+            tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if not {"users", "orders", "ledger", "settings"} <= tables:
+                raise ValueError("это не база Solutions Numbers")
+            users = c.execute("SELECT COUNT(*), COALESCE(SUM(kop),0) FROM users").fetchone()
+            orders = c.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        finally:
+            c.close()
+    except sqlite3.DatabaseError as exc:
+        raise ValueError(f"не база SQLite: {exc}") from exc
+    return {"users": users[0], "kop": users[1], "orders": orders}
+
+
+async def restore_from(src) -> dict:
+    """Заменяет текущую базу копией из файла — на лету, без перезапуска бота."""
+    info = check_backup(src)
+    async with aiosqlite.connect(src) as s:
+        await s.backup(conn())
+    await _migrate()
+    await load_overrides()
+    return info
+
+
+async def stats_brief() -> dict:
+    u = await one("SELECT COUNT(*) n, COALESCE(SUM(kop),0) k FROM users")
+    o = await one("SELECT COUNT(*) n FROM orders")
+    return {"users": u["n"], "kop": u["k"], "orders": o["n"]}
 
 
 async def close() -> None:

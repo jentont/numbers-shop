@@ -357,6 +357,7 @@ ADMIN_HELP = (
     "/lzt — почему нет лотов: токен, баланс, поиск\n"
     "/lzt_check ID — проверить лот перед покупкой (бесплатно), /lzt_buy ID — купить через API\n"
     "/lzt_code ЗАКАЗ — что LZT отдаёт по коду входа (если покупателю «код не идёт»)\n"
+    "/backup — копия базы файлом; восстановить: отправить файл с подписью /restore\n"
     "/buy_on — снять паузу покупок\n"
     "/seller_ban НИК — не продавать лоты продавца, /seller_unban НИК — вернуть\n"
     "/emoji_list — какие премиум-эмодзи найдены, /emoji_set 📱 + премиум — заменить"
@@ -536,6 +537,66 @@ async def lzt_try(m: Message, command: CommandObject) -> None:
     except Exception as exc:  # noqa: BLE001
         await m.answer(f"<b>{'Покупка' if real else 'Проверка'} лота {item_id}: ошибка</b>\n"
                        f"<code>{html.escape(str(exc))[:1500]}</code>")
+
+
+async def send_backup(chat_ids, title: str = "Копия базы") -> int:
+    """Отправляет файл базы указанным людям. Возвращает, скольким дошло."""
+    import tempfile
+    from pathlib import Path
+    from aiogram.types import FSInputFile
+    bot = shop.bot
+    if bot is None:
+        return 0
+    stamp = time.strftime("%Y%m%d_%H%M")
+    path = Path(tempfile.gettempdir()) / f"numbers_{stamp}.db"
+    await db.backup_file(path)
+    st = await db.stats_brief()
+    caption = (f"{emoji.tag('📦')} <b>{html.escape(title)}</b>\n"
+               f"Людей: {st['users']} · заказов: {st['orders']} · на балансах: {shop.money(int(st['kop']))}\n"
+               "Восстановить: отправьте этот файл боту с подписью /restore")
+    sent = 0
+    try:
+        for cid in chat_ids:
+            try:
+                await bot.send_document(cid, FSInputFile(path, filename=path.name), caption=caption)
+                sent += 1
+            except TelegramAPIError as exc:
+                log.warning("копия базы для %s: %s", cid, exc)
+    finally:
+        path.unlink(missing_ok=True)
+    return sent
+
+
+@router.message(Command("backup"))
+async def backup_cmd(m: Message) -> None:
+    if _is_admin(m.from_user.id):
+        await send_backup([m.chat.id])
+
+
+@router.message(F.document, F.caption.startswith("/restore"))
+async def restore_cmd(m: Message) -> None:
+    """Файл копии с подписью /restore — заменяет базу. Перед этим текущая база уходит админу."""
+    if not _is_admin(m.from_user.id):
+        return
+    import tempfile
+    from pathlib import Path
+    doc = m.document
+    if (doc.file_size or 0) > 20 * 1024 * 1024:
+        return await m.answer("Файл больше 20 МБ — Telegram не даст боту его скачать.")
+    path = Path(tempfile.gettempdir()) / f"restore_{doc.file_unique_id}.db"
+    try:
+        await m.bot.download(doc, destination=path)
+        try:
+            info = db.check_backup(path)
+        except ValueError as exc:
+            return await m.answer(f"Не восстанавливаю: {html.escape(str(exc))}")
+        await send_backup([m.chat.id], "Копия ДО восстановления (на всякий случай)")
+        info = await db.restore_from(path)
+        await m.answer(f"{emoji.tag('✅')} <b>База восстановлена</b>\n"
+                       f"Людей: {info['users']} · заказов: {info['orders']} · "
+                       f"на балансах: {shop.money(int(info['kop']))}")
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @router.message(Command("lzt_code"))

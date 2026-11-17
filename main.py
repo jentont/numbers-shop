@@ -41,6 +41,11 @@ async def worker() -> None:
                     import botprofile
                     await botprofile.refresh(shop.bot)
             now = dt.datetime.now(shop.MSK)
+            if shop.bot is not None and config.BACKUP_HOUR >= 0 and now.hour == config.BACKUP_HOUR:
+                if await db.get_setting("backup_day") != shop.today():
+                    await db.set_setting("backup_day", shop.today())
+                    import bot as botmod
+                    await botmod.send_backup(config.ADMIN_IDS, "Ежедневная копия базы")
             if config.GIVEAWAY_ON and now.hour == config.GIVEAWAY_HOUR:
                 row = await db.one("SELECT status FROM giveaways WHERE day=?", (shop.today(),))
                 if row is None or row["status"] == "open":
