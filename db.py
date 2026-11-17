@@ -203,6 +203,54 @@ async def restore_from(src) -> dict:
     return info
 
 
+async def restore_balances_csv(raw: bytes, exported_at: int = 0) -> dict:
+    """Балансы из «Выгрузки CSV» админки — если база пропала при передеплое.
+
+    Начисляем только тем, кого в базе нет или кто создан ЗАНОВО после выгрузки
+    (exported_at): значит, его старая запись пропала. Кто старше выгрузки — база
+    цела, не трогаем. Повторная отправка файла ничего не удвоит (метка в журнале).
+    """
+    import csv
+    import datetime as dt
+    import io
+    text = raw.decode("utf-8-sig", errors="replace")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    if not rows or not {"id", "balance_rub"} <= set(rows[0]):
+        raise ValueError("это не выгрузка людей из админки (нужны колонки id и balance_rub)")
+    if not exported_at:
+        msk = dt.timezone(dt.timedelta(hours=3))
+        for r in rows:
+            try:
+                t = int(dt.datetime.strptime(r.get("created") or "", "%d.%m.%y %H:%M").replace(tzinfo=msk).timestamp())
+                exported_at = max(exported_at, t + 60)
+            except ValueError:
+                continue
+    if not exported_at:
+        raise ValueError("не понял, когда сделана выгрузка")
+    users = kop_total = skipped = 0
+    for r in rows:
+        try:
+            uid = int(r["id"])
+            want = int(round(float(r["balance_rub"]) * 100))
+        except (TypeError, ValueError):
+            continue
+        if want <= 0 or want > 10_000_000:
+            continue
+        cur = await one("SELECT created_at FROM users WHERE id=?", (uid,))
+        if cur is None:
+            await run("INSERT INTO users(id,name,username,created_at) VALUES(?,?,?,?)",
+                      (uid, (r.get("name") or "")[:64], (r.get("username") or "").lstrip("@")[:64], now()))
+        elif int(cur["created_at"]) <= exported_at:
+            skipped += 1                                  # запись старше выгрузки — база цела
+            continue
+        if await one("SELECT 1 FROM ledger WHERE user_id=? AND reason='restore' AND ref='csv'", (uid,)):
+            continue
+        await add_kop(uid, want, "restore", "csv")
+        users += 1
+        kop_total += want
+    return {"users": users, "kop": kop_total, "skipped": skipped}
+
+
 async def stats_brief() -> dict:
     u = await one("SELECT COUNT(*) n, COALESCE(SUM(kop),0) k FROM users")
     o = await one("SELECT COUNT(*) n FROM orders")

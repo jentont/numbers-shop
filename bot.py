@@ -586,6 +586,23 @@ async def restore_cmd(m: Message) -> None:
     path = Path(tempfile.gettempdir()) / f"restore_{doc.file_unique_id}.db"
     try:
         await m.bot.download(doc, destination=path)
+        if (doc.file_name or "").lower().endswith(".csv"):
+            # Выгрузка людей из админки: досыпаем балансы, никому не уменьшаем.
+            try:
+                import datetime as _dt
+                import re as _re
+                exp = 0
+                mt = _re.search(r"(\d{8})_(\d{4})", doc.file_name or "")
+                if mt:
+                    exp = int(_dt.datetime.strptime(mt.group(1) + mt.group(2), "%Y%m%d%H%M")
+                              .replace(tzinfo=shop.MSK).timestamp()) + 60
+                res = await db.restore_balances_csv(path.read_bytes(), exp)
+            except ValueError as exc:
+                return await m.answer(f"Не восстанавливаю: {html.escape(str(exc))}")
+            return await m.answer(f"{emoji.tag('✅')} <b>Балансы восстановлены из CSV</b>\n"
+                                  f"Начислено {res['users']} людям, всего {shop.money(res['kop'])}.\n"
+                                  f"Не тронуто (база у них цела): {res['skipped']}. "
+                                  "Повторная отправка ничего не удвоит.")
         try:
             info = db.check_backup(path)
         except ValueError as exc:
